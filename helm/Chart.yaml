@@ -1,0 +1,11 @@
+apiVersion: v2
+name: agones-palworld
+description: Agones Fleet + sidecar for Palworld dedicated servers
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/m00nwtchr/agones-palworld
+sources:
+  - https://github.com/m00nwtchr/agones-palworld
+maintainers:
+  - name: m00nwtchr

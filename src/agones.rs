@@ -3,6 +3,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+use agones::Sdk;
+
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -146,6 +148,134 @@ pub trait AgonesOps: Send + Sync {
     fn list_append<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()>;
     fn list_delete<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()>;
     fn current_state(&self) -> BoxFuture<'_, AgonesState>;
+}
+
+#[derive(Clone)]
+pub struct Bridge {
+    sdk: Sdk,
+}
+
+impl Bridge {
+    pub fn new(sdk: Sdk) -> Self {
+        Self { sdk }
+    }
+}
+
+impl AgonesOps for Bridge {
+    fn ready(&self) -> BoxFuture<'_, ()> {
+        let mut sdk = self.sdk.clone();
+        Box::pin(async move {
+            sdk.ready()
+                .await
+                .map_err(|e| tracing::error!(error = %e, "sdk.ready failed"))
+                .ok();
+        })
+    }
+    fn allocate(&self) -> BoxFuture<'_, ()> {
+        let mut sdk = self.sdk.clone();
+        Box::pin(async move {
+            sdk.allocate()
+                .await
+                .map_err(|e| tracing::error!(error = %e, "sdk.allocate failed"))
+                .ok();
+        })
+    }
+    fn set_ready(&self) -> BoxFuture<'_, ()> {
+        let mut sdk = self.sdk.clone();
+        Box::pin(async move {
+            sdk.ready()
+                .await
+                .map_err(|e| tracing::error!(error = %e, "sdk.set_ready failed"))
+                .ok();
+        })
+    }
+    fn shutdown(&self) -> BoxFuture<'_, ()> {
+        let mut sdk = self.sdk.clone();
+        Box::pin(async move {
+            sdk.shutdown()
+                .await
+                .map_err(|e| tracing::error!(error = %e, "sdk.shutdown failed"))
+                .ok();
+        })
+    }
+    fn health_ping(&self) -> BoxFuture<'_, ()> {
+        let sdk = self.sdk.clone();
+        Box::pin(async move {
+            sdk.health_check()
+                .send(())
+                .await
+                .map_err(|e| tracing::error!(error = %e, "sdk.health failed"))
+                .ok();
+        })
+    }
+    fn counter_add<'a>(&'a self, name: &'a str, delta: i64) -> BoxFuture<'a, ()> {
+        let mut beta = self.sdk.beta().clone();
+        Box::pin(async move {
+            if delta >= 0 {
+                beta.increment_counter(name, delta)
+                    .await
+                    .map_err(|e| tracing::error!(error = %e, name, "increment failed"))
+                    .ok();
+            } else {
+                beta.decrement_counter(name, -delta)
+                    .await
+                    .map_err(|e| tracing::error!(error = %e, name, "decrement failed"))
+                    .ok();
+            }
+        })
+    }
+    fn list_append<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()> {
+        let mut beta = self.sdk.beta().clone();
+        Box::pin(async move {
+            beta.append_list_value(name, value)
+                .await
+                .map_err(|e| tracing::error!(error = %e, name, value, "append failed"))
+                .ok();
+        })
+    }
+    fn list_delete<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()> {
+        let mut beta = self.sdk.beta().clone();
+        Box::pin(async move {
+            beta.delete_list_value(name, value)
+                .await
+                .map_err(|e| tracing::error!(error = %e, name, value, "delete failed"))
+                .ok();
+        })
+    }
+    fn current_state(&self) -> BoxFuture<'_, AgonesState> {
+        let mut sdk = self.sdk.clone();
+        Box::pin(async move {
+            let state = match sdk.get_gameserver().await {
+                Ok(gs) => gs
+                    .status
+                    .as_ref()
+                    .map(|s| s.state.clone())
+                    .unwrap_or_default(),
+                Err(_) => String::new(),
+            };
+            parse_state(&state)
+        })
+    }
+}
+
+fn parse_state(s: &str) -> AgonesState {
+    match s {
+        "Scheduled" => AgonesState::Scheduled,
+        "Ready" => AgonesState::Ready,
+        "Allocated" => AgonesState::Allocated,
+        "Shutdown" => AgonesState::Shutdown,
+        _ => AgonesState::Scheduled,
+    }
+}
+
+#[cfg(test)]
+mod bridge_tests {
+    use super::*;
+    #[test]
+    fn bridge_is_agones_ops() {
+        fn assert_ops<T: AgonesOps>() {}
+        assert_ops::<Bridge>();
+    }
 }
 
 #[cfg(test)]

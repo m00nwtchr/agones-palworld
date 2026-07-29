@@ -6,7 +6,6 @@ use url::Url;
 
 use crate::error::AppResult;
 
-#[derive(Debug)]
 pub struct SecretString(String);
 
 impl SecretString {
@@ -15,6 +14,12 @@ impl SecretString {
     }
     pub fn expose(&self) -> &str {
         &self.0
+    }
+}
+
+impl std::fmt::Debug for SecretString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SecretString(\"***\")")
     }
 }
 
@@ -131,5 +136,16 @@ mod tests {
         assert_eq!(c.metrics_host, "::");
         assert!(c.otel_endpoint.is_none());
         assert!(!c.disable_prometheus);
+    }
+
+    #[test]
+    fn secret_string_debug_redacts_password() {
+        let secret = SecretString::new("hunter2-supersecret");
+        let dbg = format!("{:?}", secret);
+        assert!(
+            !dbg.contains("hunter2-supersecret"),
+            "Debug leaked raw password: {dbg}"
+        );
+        assert!(dbg.contains("***"), "Debug missing redaction marker: {dbg}");
     }
 }

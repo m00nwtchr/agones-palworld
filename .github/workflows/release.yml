@@ -95,17 +95,9 @@ jobs:
 
       - name: login-ghcr-oci
         run: |
-          mkdir -p ~/.config/helm
-          AUTH_B64=$(printf '%s' '${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)
-          cat > ~/.config/helm/registry/config.json <<EOF
-          {
-            "auths": {
-              "ghcr.io": {
-                "auth": "${AUTH_B64}"
-              }
-            }
-          }
-          EOF
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
 
       - name: helm-package
         shell: bash
@@ -120,8 +112,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TPL=oci://ghcr.io/m00nwtchr/charts/palworld
-          devenv shell -- bash -c "set -euo pipefail; helm push /tmp/chart/agones-palworld-${{ steps.version.outputs.version }}.tgz \$TPL"
+          devenv shell -- bash -c "set -euo pipefail; helm push /tmp/chart/palworld-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/m00nwtchr/charts/"
 
       - name: github-release
         if: startsWith(github.ref, 'refs/tags/v')

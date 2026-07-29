@@ -61,7 +61,7 @@ spec:
           {{- $newEnv := list }}
           {{- range $c.env }}
             {{- if eq .name "PALWORLD_API_URL" }}
-              {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://localhost:%d" (int $.Values.palworld.restPort))) }}
+              {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://127.0.0.1:%d" (int $.Values.palworld.restPort))) }}
             {{- else if eq .name "PALWORLD_ADMIN_PASSWORD" }}
               {{- $newEnv = append $newEnv (dict "name" "PALWORLD_ADMIN_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" $secretName "key" $.Values.secret.passwordKey))) }}
             {{- else }}

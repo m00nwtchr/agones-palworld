@@ -129,7 +129,10 @@ containerSecurityContext:
   capabilities: { drop: ["ALL"] }
 
 service:
-  type: Headless
+  # Headless behavior is achieved via clusterIP: None (the modern k8s way).
+  # type=Headless was deprecated and removed in k8s >=1.26.
+  type: ClusterIP
+  clusterIP: None
   port: 8211
   protocol: UDP
   ipFamilyPolicy: SingleStack

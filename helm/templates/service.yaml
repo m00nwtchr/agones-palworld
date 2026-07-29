@@ -11,7 +11,7 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
-  {{- if eq .Values.service.type "Headless" }}
+  {{- if eq .Values.service.clusterIP "None" }}
   clusterIP: None
   {{- end }}
   ipFamilyPolicy: {{ .Values.service.ipFamilyPolicy }}

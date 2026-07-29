@@ -298,7 +298,7 @@ fleet:
   template:
     metadata: { annotations: { agones.dev/sdk-server: agones-sidecar } }
     spec:
-      ports: [ { name: game, portPolicy: NodePort, containerPort: 8211, protocol: UDP } ]
+      ports: [ { name: game, portPolicy: None, containerPort: 8211, protocol: UDP } ]
       health: { periodSeconds: 2, failureThreshold: 3 }
       sdkServer: { grpcPort: 9358, httpPort: 9359 }
       # Chart-managed container defaults live here. Operator overrides

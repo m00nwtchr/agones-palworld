@@ -15,7 +15,7 @@ fleet:
         agones.dev/sdk-server: agones-sidecar
     spec:
       ports:
-        - { name: game, portPolicy: NodePort, containerPort: 8211, protocol: UDP }
+        - { name: game, portPolicy: None, containerPort: 8211, protocol: UDP }
       health: { periodSeconds: 2, failureThreshold: 3 }
       sdkServer: { grpcPort: 9358, httpPort: 9359 }
       containers:

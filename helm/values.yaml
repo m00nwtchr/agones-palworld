@@ -1,0 +1,127 @@
+# values.yaml — agones-palworld chart
+#
+# Every key is one of:
+#   (a) a chart opinion we hold firmly (sensible default for homelab persistent Palworld on Agones)
+#   (b) an escape hatch to override an opinion
+#   (c) a full pass-through for things we have no claim on (operator-owned maps/lists)
+
+fleet:
+  replicas: 1
+  strategy: { type: Recreate }
+  scheduling: Packed
+  template:
+    metadata:
+      annotations:
+        agones.dev/sdk-server: agones-sidecar
+    spec:
+      ports:
+        - { name: game, portPolicy: NodePort, containerPort: 8211, protocol: UDP }
+      health: { periodSeconds: 2, failureThreshold: 3 }
+      sdkServer: { grpcPort: 9358, httpPort: 9359 }
+      containers:
+        - name: palworld
+          image: PLACEHOLDER_REPLACED_BY_TEMPLATE
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/scripts/patch-palworld-settings.sh"]
+          args: ["-port=8211", "-useperfthreads", "-NoAsyncLoadingThread", "-UseMultithreadForDS"]
+          env:
+            - name: PALWORLD_RESTAPI_ENABLED
+              value: "True"
+          envFrom:
+            - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+          ports:
+            - { name: game, containerPort: 8211, protocol: UDP }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+            - { name: savegames, mountPath: /pal/Package/Pal/Saved }
+        - name: agones-sidecar
+          image: PLACEHOLDER_REPLACED_BY_TEMPLATE
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PALWORLD_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE, key: palworld_admin_password } }
+            - name: PALWORLD_API_URL
+              value: "http://localhost:8211"
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          ports:
+            - { name: metrics, containerPort: 9090, protocol: TCP }
+      volumes:
+        - name: scripts
+          configMap: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+        - name: savegames
+          persistentVolumeClaim: { claimName: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+
+palworld:
+  image:
+    repository: ghcr.io/pocketpairjp/palserver
+    tag: ""
+    pullPolicy: IfNotPresent
+  restPort: 8211
+  gamePort: 8211
+  env: { }
+  envFrom: [ ]
+
+sidecar:
+  image:
+    repository: ghcr.io/m00nwtchr/agones-palworld
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  pollIntervalSeconds: 5
+  healthIntervalSeconds: 2
+  shutdown:
+    saveTimeoutSeconds: 30
+    waittimeSeconds: 30
+    announceMessage: "Server shutting down"
+  env: { }
+  envFrom: [ ]
+
+otel:
+  enabled: true
+  endpoint: ""
+  protocol: "grpc"
+  serviceName: "agones-palworld"
+  serviceNamespace: "palworld"
+  serviceVersion: ""
+
+metrics:
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 9090
+    annotations: { }
+    labels: { }
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    scheme: HTTP
+    labels: { }
+    namespaceSelector: ""
+    honorLabels: false
+
+pvc:
+  enabled: true
+  existingClaim: ""
+  size: 50Gi
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  mountPath: /pal/Package/Pal/Saved
+
+service:
+  type: Headless
+  port: 8211
+  protocol: UDP
+  annotations: { }
+  labels: { }
+
+secret:
+  enabled: true
+  existingSecret: ""
+  passwordKey: "palworld_admin_password"
+  autoGenerate: true
+  length: 32

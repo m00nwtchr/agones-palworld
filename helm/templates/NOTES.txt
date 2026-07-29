@@ -1,3 +1,4 @@
+{{- include "agones-palworld.validate" . }}
 Palworld Fleet deployed.
 
 Game port:   {{ .Values.service.port }}/{{ .Values.service.protocol }}

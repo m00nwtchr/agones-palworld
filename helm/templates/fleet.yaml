@@ -1,3 +1,4 @@
+{{- include "agones-palworld.validate" . }}
 apiVersion: agones.dev/v1
 kind: Fleet
 metadata:
@@ -28,7 +29,12 @@ spec:
             {{- end }}
             {{- $_ := set $c "env" (concat (default list $c.env) $extra) }}
           {{- end }}
-          {{- $secretName := printf "%s-admin" (include "agones-palworld.fullname" $) }}
+          {{- $secretName := "" }}
+          {{- if $.Values.secret.existingSecret }}
+            {{- $secretName = $.Values.secret.existingSecret }}
+          {{- else }}
+            {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
+          {{- end }}
           {{- $envFromList := list (dict "secretRef" (dict "name" $secretName)) }}
           {{- with $.Values.palworld.envFrom }}
             {{- $envFromList = concat $envFromList . }}
@@ -37,15 +43,21 @@ spec:
           {{- $containers = append $containers $c }}
         {{- else if eq $c.name "agones-sidecar" }}
           {{- $c := deepCopy $c }}
-          {{- if and $.Values.sidecar.image.digest $.Values.sidecar.image.tag }}
-            {{- $_ := set $c "image" (printf "%s:%s@%s" $.Values.sidecar.image.repository $.Values.sidecar.image.tag $.Values.sidecar.image.digest) }}
+          {{- $sidecarTag := default $.Chart.AppVersion $.Values.sidecar.image.tag }}
+          {{- if and $.Values.sidecar.image.digest $sidecarTag }}
+            {{- $_ := set $c "image" (printf "%s:%s@%s" $.Values.sidecar.image.repository $sidecarTag $.Values.sidecar.image.digest) }}
           {{- else if $.Values.sidecar.image.digest }}
             {{- $_ := set $c "image" (printf "%s@%s" $.Values.sidecar.image.repository $.Values.sidecar.image.digest) }}
           {{- else }}
-            {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository $.Values.sidecar.image.tag) }}
+            {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository $sidecarTag) }}
           {{- end }}
           {{- $_ := set $c "imagePullPolicy" $.Values.sidecar.image.pullPolicy }}
-          {{- $secretName := printf "%s-admin" (include "agones-palworld.fullname" $) }}
+          {{- $secretName := "" }}
+          {{- if $.Values.secret.existingSecret }}
+            {{- $secretName = $.Values.secret.existingSecret }}
+          {{- else }}
+            {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
+          {{- end }}
           {{- $newEnv := list }}
           {{- range $c.env }}
             {{- if eq .name "PALWORLD_API_URL" }}

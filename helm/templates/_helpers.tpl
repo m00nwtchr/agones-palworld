@@ -26,8 +26,12 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- end -}}
 
 {{- /*
-Validation rules. Each one fails template render if violated.
+Pre-flight validation rules. The `agones-palworld.validate` define is invoked
+at the top of every template so the rules always execute during `helm install`
+or `helm template`. Each rule calls `fail` on violation, which aborts the render.
 */ -}}
+
+{{- define "agones-palworld.validate" -}}
 
 {{- if not .Values.palworld.image.tag -}}
 {{- fail "palworld.image.tag is required (set to the palserver version+@sha256: digest)." -}}
@@ -55,4 +59,6 @@ Validation rules. Each one fails template render if violated.
 
 {{- if eq (.Values.palworld.env.PALWORLD_RESTAPI_ENABLED | default "") "False" -}}
 {{- fail "palworld.env.PALWORLD_RESTAPI_ENABLED=False breaks the sidecar (no REST API to poll)." -}}
+{{- end -}}
+
 {{- end -}}

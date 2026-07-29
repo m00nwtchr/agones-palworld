@@ -1,3 +1,4 @@
+{{- include "agones-palworld.validate" . }}
 {{- if and .Values.pvc.enabled (not .Values.pvc.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim

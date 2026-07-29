@@ -1,3 +1,4 @@
+{{- include "agones-palworld.validate" . }}
 {{- if and .Values.metrics.serviceMonitor.enabled .Values.metrics.service.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

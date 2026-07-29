@@ -34,11 +34,11 @@ or `helm template`. Each rule calls `fail` on violation, which aborts the render
 {{- define "agones-palworld.validate" -}}
 
 {{- if not .Values.palworld.image.tag -}}
-{{- fail "palworld.image.tag is required (set to the palserver version+@sha256: digest)." -}}
+{{- fail "palworld.image.tag is required (format: \"vX.X.X\" or \"vX.X.X@sha256:digest\")." -}}
 {{- end -}}
 
-{{- if and (not .Values.sidecar.image.tag) (not .Values.sidecar.image.digest) -}}
-{{- fail "sidecar.image requires either .tag or .digest; CI must pin the digest." -}}
+{{- if not .Values.sidecar.image.tag -}}
+{{- fail "sidecar.image.tag is required (defaults to chart appVersion; CI fills in the digest)." -}}
 {{- end -}}
 
 {{- if not .Values.secret.enabled -}}

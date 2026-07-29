@@ -57,6 +57,7 @@ fleet:
 palworld:
   image:
     repository: ghcr.io/pocketpairjp/palserver
+    # tag format: "vX.Y.Z" (or "vX.Y.Z@sha256:<digest>" to pin).
     tag: ""
     pullPolicy: IfNotPresent
   restPort: 8211
@@ -67,8 +68,8 @@ palworld:
 sidecar:
   image:
     repository: ghcr.io/m00nwtchr/agones-palworld
+    # tag format: "X.Y.Z" (or "X.Y.Z@sha256:<digest>" to pin); defaults to chart AppVersion when empty.
     tag: ""
-    digest: ""
     pullPolicy: IfNotPresent
   pollIntervalSeconds: 5
   healthIntervalSeconds: 2
@@ -91,6 +92,8 @@ metrics:
   service:
     enabled: true
     type: ClusterIP
+    ipFamilyPolicy: PreferDualStack
+    ipFamilies: [IPv6, IPv4]
     port: 9090
     annotations: { }
     labels: { }
@@ -112,10 +115,26 @@ pvc:
   accessModes: [ReadWriteOnce]
   mountPath: /pal/Package/Pal/Saved
 
+pod:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile: { type: RuntimeDefault }
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+
 service:
   type: Headless
   port: 8211
   protocol: UDP
+  ipFamilyPolicy: SingleStack
+  ipFamilies: [IPv4]
   annotations: { }
   labels: { }
 

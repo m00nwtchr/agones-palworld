@@ -31,13 +31,14 @@ jobs:
         uses: cachix/install-nix-action@v27
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: experimental-features = nix-command flakes
         env:
           cachix.pull: m00nwtchr
 
       - name: install-devenv
         shell: bash
         run: |
-          nix profile add --experimental-features "nix-command flakes" nixpkgs#devenv
+          nix profile add nixpkgs#devenv
           devenv version || true
 
       - name: quality-gate

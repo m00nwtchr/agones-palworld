@@ -2,6 +2,8 @@
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use http_body_util::Full;
@@ -23,6 +25,7 @@ use tracing_subscriber::{EnvFilter, prelude::*};
 
 use crate::config::Config;
 use crate::error::{AppError, AppResult};
+use crate::palworld;
 
 pub const EXPECTED_NAMES: &[&str] = &[
     "palworld.sidecar.poll_cycles",
@@ -44,8 +47,13 @@ pub const EXPECTED_NAMES: &[&str] = &[
     "palworld.world.in_game_days",
 ];
 
+pub const HEALTH_UNKNOWN: u8 = 0;
+pub const HEALTH_OK: u8 = 1;
+pub const HEALTH_BAD: u8 = 2;
+
 #[derive(Clone)]
 pub struct Metrics {
+    pub palworld_health: Arc<AtomicU8>,
     pub poll_cycles: Counter<u64>,
     pub poll_errors: Counter<u64>,
     pub player_joins: Counter<u64>,
@@ -69,11 +77,13 @@ pub struct Guard {
     _provider: SdkMeterProvider,
     pub registry: Registry,
     server_shutdown: tokio::sync::watch::Sender<bool>,
+    health_probe: tokio::task::JoinHandle<()>,
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
         let _ = self.server_shutdown.send(true);
+        self.health_probe.abort();
         opentelemetry::global::shutdown_tracer_provider();
     }
 }
@@ -123,6 +133,7 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
         })
         .build();
     let m = Metrics {
+        palworld_health: Arc::new(AtomicU8::new(HEALTH_UNKNOWN)),
         poll_cycles: meter.u64_counter("palworld.sidecar.poll_cycles").build(),
         poll_errors: meter.u64_counter("palworld.sidecar.poll_errors").build(),
         player_joins: meter.u64_counter("palworld.sidecar.player_joins").build(),
@@ -191,13 +202,29 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
             .map_err(|e| AppError::Config(format!("invalid METRICS_HOST:PORT: {e}")))?;
         let (tx, rx) = tokio::sync::watch::channel(false);
         let registry = prom_registry.clone();
+        let health = m.palworld_health.clone();
         tokio::spawn(async move {
-            if let Err(e) = run_metrics_server(addr, registry, rx).await {
+            if let Err(e) = run_metrics_server(addr, registry, health, rx).await {
                 tracing::error!(error = %e, "metrics server exited");
             }
         });
         tx
     };
+
+    let probe_state = m.palworld_health.clone();
+    let probe_client = palworld::Client::new(cfg.api_url.clone(), cfg.admin_password.expose());
+    let health_probe = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let state = match probe_client.info().await {
+                Ok(_) => HEALTH_OK,
+                Err(_) => HEALTH_BAD,
+            };
+            probe_state.store(state, Ordering::Relaxed);
+        }
+    });
 
     Ok((
         m,
@@ -205,6 +232,7 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
             _provider: provider,
             registry: prom_registry,
             server_shutdown,
+            health_probe,
         },
     ))
 }
@@ -212,6 +240,7 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
 async fn run_metrics_server(
     addr: SocketAddr,
     registry: Registry,
+    health: Arc<AtomicU8>,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) -> AppResult<()> {
     let listener = TcpListener::bind(addr)
@@ -234,11 +263,13 @@ async fn run_metrics_server(
                     }
                 };
                 let registry = registry.clone();
+                let health = health.clone();
                 tokio::spawn(async move {
                     let io = TokioIo::new(stream);
                     let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
                         let registry = registry.clone();
-                        async move { handle(req, &registry).await }
+                        let health = health.clone();
+                        async move { handle(req, &registry, &health).await }
                     });
                     if let Err(e) = hyper::server::conn::http1::Builder::new()
                         .serve_connection(io, svc)
@@ -256,7 +287,24 @@ async fn run_metrics_server(
 async fn handle(
     req: Request<hyper::body::Incoming>,
     registry: &Registry,
+    health: &AtomicU8,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
+    if req.uri().path() == "/healthz" {
+        let state = health.load(Ordering::Relaxed);
+        let (status, body) = if state == HEALTH_OK {
+            (StatusCode::OK, "{\"sidecar\":\"ok\",\"palworld\":\"ok\"}")
+        } else {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{\"sidecar\":\"ok\",\"palworld\":\"down\"}",
+            )
+        };
+        return Ok(Response::builder()
+            .status(status)
+            .header("content-type", "application/json")
+            .body(Full::new(Bytes::from(body)))
+            .expect("static response"));
+    }
     if req.method() != hyper::Method::GET || req.uri().path() != "/metrics" {
         return Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -302,5 +350,21 @@ mod tests {
                 "metric name {name} not in expected list"
             );
         }
+    }
+
+    #[test]
+    fn healthz_reports_unknown_until_first_probe() {
+        let health = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(HEALTH_UNKNOWN));
+        assert_eq!(
+            health.load(std::sync::atomic::Ordering::Relaxed),
+            HEALTH_UNKNOWN
+        );
+        health.store(HEALTH_OK, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(health.load(std::sync::atomic::Ordering::Relaxed), HEALTH_OK);
+        health.store(HEALTH_BAD, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            health.load(std::sync::atomic::Ordering::Relaxed),
+            HEALTH_BAD
+        );
     }
 }

@@ -129,6 +129,9 @@ impl Config {
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn clear_env() {
         for k in [
@@ -154,6 +157,7 @@ mod tests {
 
     #[test]
     fn requires_api_url() {
+        let _g = ENV_LOCK.lock().unwrap();
         clear_env();
         unsafe {
             env::set_var("PALWORLD_ADMIN_PASSWORD", "x");
@@ -164,6 +168,7 @@ mod tests {
 
     #[test]
     fn reads_all_values() {
+        let _g = ENV_LOCK.lock().unwrap();
         clear_env();
         unsafe {
             env::set_var("PALWORLD_API_URL", "http://localhost:8211");

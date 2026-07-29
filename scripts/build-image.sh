@@ -9,7 +9,6 @@ set -euo pipefail
 
 IMAGE="${1:-ghcr.io/m00nwtchr/agones-palworld}"
 TAG="${2:-$(awk -F'"' '/^appVersion/ {print $2}' helm/Chart.yaml 2>/dev/null || echo dev)}"
-PLATFORM_FLAG=""
 PUSH=0
 for arg in "$@"; do
   case "$arg" in

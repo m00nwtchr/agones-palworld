@@ -6,8 +6,8 @@ devenv.local.yaml
 # direnv
 .direnv
 
-# pre-commit
-.pre-commit-config.yaml
+# pre-commit (devenv auto-generates a symlink at .pre-commit-config.yaml,
+# but the committed file is the source of truth for non-devenv users)
 
 # Rust
 target/

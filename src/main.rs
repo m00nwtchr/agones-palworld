@@ -15,7 +15,7 @@ use agones_palworld::state::WorldState;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cfg = Config::from_env()?;
+    let cfg = Config::load()?;
     let (metrics, _guard) = install_obs(&cfg)?;
 
     let client = Client::new(cfg.api_url.clone(), cfg.admin_password.expose());
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             poll_client,
             poll_bridge,
             poll_metrics,
-            cfg.poll_interval,
+            Duration::from_secs(cfg.poll_interval_secs),
             poll_stop,
         )
         .await;
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let health_stop = stop.clone();
     let health_bridge = bridge.clone();
     let health_metrics = metrics.clone();
-    let health_interval = cfg.health_interval;
+    let health_interval = Duration::from_secs(cfg.health_interval_secs);
     let health_handle = tokio::spawn(async move {
         let mut t = interval(health_interval);
         loop {
@@ -65,8 +65,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     do_shutdown::run(
         &client,
         bridge.as_ref(),
-        cfg.shutdown_save_timeout,
-        cfg.shutdown_waittime,
+        Duration::from_secs(cfg.shutdown_save_timeout_secs),
+        cfg.shutdown_waittime_secs,
         &cfg.shutdown_announce,
     )
     .await?;

@@ -24,7 +24,7 @@ base64 = "0.22"
 opentelemetry = "0.27"
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.27"
-opentelemetry-prometheus = "0.16"
+opentelemetry-prometheus = "0.27"
 prometheus = "0.13"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

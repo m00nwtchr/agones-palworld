@@ -34,15 +34,13 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-        env:
-          cachix.pull: m00nwtchr
+        # NB: do NOT set cachix.pull here — redirecting to m00nwtchr.cachix.com
+        # replaces the upstream nixpkgs substituter, which breaks nixpkgs
+        # lookups during `nix profile add github:cachix/devenv#devenv`.
 
       - name: install-devenv
         shell: bash
         run: |
-          # devenv is a flake, not a nixpkgs attribute (since ~2.0). Install
-          # the `devenv` output from the upstream flake repo. Pattern copied
-          # from devenv's own CI (cachix/devenv/.github/workflows/auto-format.yml).
           nix profile add --refresh --accept-flake-config github:cachix/devenv#devenv
           devenv --version || true
 

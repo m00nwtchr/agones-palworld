@@ -17,6 +17,7 @@
     cargo-nextest
     cargo-watch
     rust-analyzer
+    protobuf
   ];
 
   # https://devenv.sh/languages/

@@ -66,4 +66,14 @@ helm install palworld ./helm \
   --set sidecar.image.tag=0.1.0@sha256:<digest-pinned-by-ci>
 ```
 
+### Install from GHCR OCI registry
+
+```bash
+helm install palworld oci://ghcr.io/m00nwtchr/charts/palworld \
+  --version 0.1.0 \
+  --set palworld.image.tag=v1.0.1.100619@sha256:0d293cafd503a91a6d11d71f7bf770ee0c3c5ecf37db988349b2c1758f4e9358
+```
+
+The sidecar image tag defaults to the chart's appVersion via the chart's `default` template helper; pin the digest via Flux for production.
+
 See `helm/README.md` for chart-specific overrides and the UID/GID rationale.

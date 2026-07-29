@@ -9,3 +9,6 @@ sources:
   - https://github.com/m00nwtchr/agones-palworld
 maintainers:
   - name: m00nwtchr
+annotations:
+  category: GameServer
+  licenses: MPL-2.0

@@ -18,14 +18,17 @@ pub enum AgonesState {
 
 #[derive(Debug, Clone)]
 pub enum AgonesOp {
+    Connect,
     Ready,
     Allocate,
     SetReady,
     Shutdown,
     HealthPing,
     CounterAdd { name: String, delta: i64 },
+    CounterSet { name: String, value: i64 },
     ListAppend { name: String, value: String },
     ListDelete { name: String, value: String },
+    ListClear { name: String },
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +71,11 @@ impl MockAgones {
 }
 
 impl AgonesOps for MockAgones {
+    fn connect(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            self.state.lock().unwrap().ops.push(AgonesOp::Connect);
+        })
+    }
     fn ready(&self) -> BoxFuture<'_, ()> {
         Box::pin(async move {
             let mut s = self.state.lock().unwrap();
@@ -111,6 +119,16 @@ impl AgonesOps for MockAgones {
             *s.counters.entry(name.into()).or_default() += delta;
         })
     }
+    fn counter_set<'a>(&'a self, name: &'a str, value: i64) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            let mut s = self.state.lock().unwrap();
+            s.ops.push(AgonesOp::CounterSet {
+                name: name.into(),
+                value,
+            });
+            s.counters.insert(name.into(), value);
+        })
+    }
     fn list_append<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             let mut s = self.state.lock().unwrap();
@@ -133,20 +151,30 @@ impl AgonesOps for MockAgones {
             }
         })
     }
+    fn list_clear<'a>(&'a self, name: &'a str) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            let mut s = self.state.lock().unwrap();
+            s.ops.push(AgonesOp::ListClear { name: name.into() });
+            s.lists.insert(name.into(), Vec::new());
+        })
+    }
     fn current_state(&self) -> BoxFuture<'_, AgonesState> {
         Box::pin(async move { self.state.lock().unwrap().current })
     }
 }
 
 pub trait AgonesOps: Send + Sync {
+    fn connect(&self) -> BoxFuture<'_, ()>;
     fn ready(&self) -> BoxFuture<'_, ()>;
     fn allocate(&self) -> BoxFuture<'_, ()>;
     fn set_ready(&self) -> BoxFuture<'_, ()>;
     fn shutdown(&self) -> BoxFuture<'_, ()>;
     fn health_ping(&self) -> BoxFuture<'_, ()>;
     fn counter_add<'a>(&'a self, name: &'a str, delta: i64) -> BoxFuture<'a, ()>;
+    fn counter_set<'a>(&'a self, name: &'a str, value: i64) -> BoxFuture<'a, ()>;
     fn list_append<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()>;
     fn list_delete<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()>;
+    fn list_clear<'a>(&'a self, name: &'a str) -> BoxFuture<'a, ()>;
     fn current_state(&self) -> BoxFuture<'_, AgonesState>;
 }
 
@@ -162,6 +190,13 @@ impl Bridge {
 }
 
 impl AgonesOps for Bridge {
+    fn connect(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            tracing::debug!(
+                "sdk.connect no-op; Bridge holds Sdk already connected at construction"
+            );
+        })
+    }
     fn ready(&self) -> BoxFuture<'_, ()> {
         let mut sdk = self.sdk.clone();
         Box::pin(async move {
@@ -224,6 +259,15 @@ impl AgonesOps for Bridge {
             }
         })
     }
+    fn counter_set<'a>(&'a self, name: &'a str, value: i64) -> BoxFuture<'a, ()> {
+        let mut beta = self.sdk.beta().clone();
+        Box::pin(async move {
+            beta.set_counter_count(name, value)
+                .await
+                .map_err(|e| tracing::error!(error = %e, name, value, "set_counter_count failed"))
+                .ok();
+        })
+    }
     fn list_append<'a>(&'a self, name: &'a str, value: &'a str) -> BoxFuture<'a, ()> {
         let mut beta = self.sdk.beta().clone();
         Box::pin(async move {
@@ -239,6 +283,15 @@ impl AgonesOps for Bridge {
             beta.delete_list_value(name, value)
                 .await
                 .map_err(|e| tracing::error!(error = %e, name, value, "delete failed"))
+                .ok();
+        })
+    }
+    fn list_clear<'a>(&'a self, name: &'a str) -> BoxFuture<'a, ()> {
+        let mut beta = self.sdk.beta().clone();
+        Box::pin(async move {
+            beta.set_list_capacity(name, 0)
+                .await
+                .map_err(|e| tracing::error!(error = %e, name, "set_list_capacity(0) failed"))
                 .ok();
         })
     }

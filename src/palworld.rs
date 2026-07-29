@@ -44,14 +44,19 @@ pub struct Client {
     http: Http,
     base_url: Url,
     auth_header: HeaderValue,
+    timeout_secs: u64,
 }
 
 impl Client {
     pub fn new(base_url: Url, password: &str) -> Self {
+        Self::with_timeout(base_url, password, 5)
+    }
+
+    pub fn with_timeout(base_url: Url, password: &str, timeout_secs: u64) -> Self {
         let auth = B64.encode(format!(":{password}"));
         let auth_header = HeaderValue::from_str(&format!("Basic {auth}")).expect("ascii");
         let http = Http::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(timeout_secs))
             .connect_timeout(std::time::Duration::from_secs(2))
             .build()
             .expect("reqwest builder");
@@ -59,6 +64,7 @@ impl Client {
             http,
             base_url,
             auth_header,
+            timeout_secs,
         }
     }
 
@@ -73,7 +79,7 @@ impl Client {
         }
         let body = resp.text().await.unwrap_or_default();
         if status == StatusCode::REQUEST_TIMEOUT {
-            Err(AppError::PalworldTimeout(5))
+            Err(AppError::PalworldTimeout(self.timeout_secs))
         } else {
             Err(AppError::PalworldHttp(status, body))
         }
@@ -136,6 +142,72 @@ impl Client {
             .header(AUTHORIZATION, &self.auth_header)
             .header(CONTENT_TYPE, "application/json")
             .json(&serde_json::json!({"message": message}))
+            .send()
+            .await?;
+        let _ = self.handle(resp).await?;
+        Ok(())
+    }
+
+    pub async fn settings(&self) -> AppResult<serde_json::Value> {
+        let url = self.url("/settings")?;
+        let resp = self
+            .http
+            .get(url)
+            .header(AUTHORIZATION, &self.auth_header)
+            .send()
+            .await?;
+        let resp = self.handle(resp).await?;
+        Ok(resp.json().await?)
+    }
+
+    pub async fn stop(&self) -> AppResult<()> {
+        let url = self.url("/stop")?;
+        let resp = self
+            .http
+            .post(url)
+            .header(AUTHORIZATION, &self.auth_header)
+            .send()
+            .await?;
+        let _ = self.handle(resp).await?;
+        Ok(())
+    }
+
+    pub async fn kick(&self, user_id: &str, message: &str) -> AppResult<()> {
+        let url = self.url("/kick")?;
+        let resp = self
+            .http
+            .post(url)
+            .header(AUTHORIZATION, &self.auth_header)
+            .header(CONTENT_TYPE, "application/json")
+            .json(&serde_json::json!({"userId": user_id, "message": message}))
+            .send()
+            .await?;
+        let _ = self.handle(resp).await?;
+        Ok(())
+    }
+
+    pub async fn ban(&self, user_id: &str) -> AppResult<()> {
+        let url = self.url("/ban")?;
+        let resp = self
+            .http
+            .post(url)
+            .header(AUTHORIZATION, &self.auth_header)
+            .header(CONTENT_TYPE, "application/json")
+            .json(&serde_json::json!({"userId": user_id}))
+            .send()
+            .await?;
+        let _ = self.handle(resp).await?;
+        Ok(())
+    }
+
+    pub async fn unban(&self, user_id: &str) -> AppResult<()> {
+        let url = self.url("/unban")?;
+        let resp = self
+            .http
+            .post(url)
+            .header(AUTHORIZATION, &self.auth_header)
+            .header(CONTENT_TYPE, "application/json")
+            .json(&serde_json::json!({"userId": user_id}))
             .send()
             .await?;
         let _ = self.handle(resp).await?;

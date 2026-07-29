@@ -28,10 +28,12 @@ jobs:
           fetch-depth: 0
 
       - name: install-nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          extra_nix_config: experimental-features = nix-command flakes
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
         env:
           cachix.pull: m00nwtchr
 
@@ -39,9 +41,10 @@ jobs:
         shell: bash
         run: |
           # devenv is a flake, not a nixpkgs attribute (since ~2.0). Install
-          # the `devenv` output from the upstream flake repo.
-          nix profile add github:cachix/devenv#devenv --refresh --accept-flake-config
-          devenv version || true
+          # the `devenv` output from the upstream flake repo. Pattern copied
+          # from devenv's own CI (cachix/devenv/.github/workflows/auto-format.yml).
+          nix profile add --refresh --accept-flake-config github:cachix/devenv#devenv
+          devenv --version || true
 
       - name: quality-gate
         shell: bash

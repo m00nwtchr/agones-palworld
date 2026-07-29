@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 FROM rust:bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    musl-tools pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+    musl-tools pkg-config libssl-dev ca-certificates protobuf-compiler && rm -rf /var/lib/apt/lists/*
 RUN rustup target add x86_64-unknown-linux-musl
 RUN echo 'palworld:x:999:999:palworld:/:/sbin/nologin' >> /etc/passwd
 ENV RUSTFLAGS="-C target-feature=+crt-static"

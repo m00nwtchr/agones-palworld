@@ -162,7 +162,7 @@ git commit -m "feat(cargo): scaffold agones-palworld crate with deps"
 - Modify: `src/lib.rs` — add `pub mod error;`
 
 **Interfaces:**
-- Consumes: `thiserror`, `reqwest::Error`, `serde_json::Error`, `agones::SdkError`
+- Consumes: `thiserror`, `reqwest::Error`, `serde_json::Error`, `agones::errors::Error`
 - Produces: `pub type AppResult<T> = Result<T, AppError>;` and `pub enum AppError`
 
 - [ ] **Step 1: Write the failing test**
@@ -203,7 +203,7 @@ pub enum AppError {
     Config(String),
 
     #[error("agones: {0}")]
-    Agones(#[from] agones::SdkError),
+    Agones(#[from] agones::errors::Error),
 
     #[error("palworld http {0}: {1}")]
     PalworldHttp(reqwest::StatusCode, String),
@@ -221,7 +221,7 @@ pub enum AppError {
     Url(#[from] url::ParseError),
 
     #[error("otel: {0}")]
-    Otel(#[from] opentelemetry::global::Error),
+    Otel(#[from] opentelemetry_sdk::error::Error),
 
     #[error("signal: {0}")]
     Signal(String),

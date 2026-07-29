@@ -1,0 +1,16 @@
+{{- if and .Values.pvc.enabled (not .Values.pvc.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agones-palworld.fullname" . }}-savegames
+  labels:
+    {{- include "agones-palworld.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.pvc.accessModes | nindent 4 }}
+  resources:
+    requests: { storage: {{ .Values.pvc.size | quote }} }
+  {{- with .Values.pvc.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

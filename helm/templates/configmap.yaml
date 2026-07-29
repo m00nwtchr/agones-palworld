@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agones-palworld.fullname" . }}-config
+  labels:
+    {{- include "agones-palworld.labels" . | nindent 4 }}
+data:
+  patch-palworld-settings.sh: |-
+    {{- .Files.Get "files/patch-palworld-settings.sh" | nindent 4 }}

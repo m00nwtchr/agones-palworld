@@ -115,10 +115,26 @@ pvc:
   accessModes: [ReadWriteOnce]
   mountPath: /pal/Package/Pal/Saved
 
+pod:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile: { type: RuntimeDefault }
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }
+
 service:
   type: Headless
   port: 8211
   protocol: UDP
+  ipFamilyPolicy: SingleStack
+  ipFamilies: [IPv4]
   annotations: { }
   labels: { }
 

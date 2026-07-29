@@ -40,6 +40,9 @@ spec:
             {{- $envFromList = concat $envFromList . }}
           {{- end }}
           {{- $_ := set $c "envFrom" $envFromList }}
+          {{- with $.Values.containerSecurityContext }}
+          {{- $_ := set $c "securityContext" . }}
+          {{- end }}
           {{- $containers = append $containers $c }}
         {{- else if eq $c.name "agones-sidecar" }}
           {{- $c := deepCopy $c }}
@@ -70,8 +73,14 @@ spec:
           {{- if $.Values.sidecar.envFrom }}
             {{- $_ := set $c "envFrom" $.Values.sidecar.envFrom }}
           {{- end }}
+          {{- with $.Values.containerSecurityContext }}
+          {{- $_ := set $c "securityContext" . }}
+          {{- end }}
           {{- $containers = append $containers $c }}
         {{- else }}
+          {{- with $.Values.containerSecurityContext }}
+          {{- $_ := set $c "securityContext" . }}
+          {{- end }}
           {{- $containers = append $containers $c }}
         {{- end }}
       {{- end }}
@@ -96,5 +105,8 @@ spec:
         {{- if not (or (eq $k "containers") (eq $k "volumes")) }}
           {{- $_ := set $spec $k $v }}
         {{- end }}
+      {{- end }}
+      {{- with $.Values.pod.securityContext }}
+      {{- $_ := set $spec "securityContext" . }}
       {{- end }}
       {{- toYaml $spec | nindent 6 }}

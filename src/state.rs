@@ -1,9 +1,12 @@
 use std::collections::BTreeSet;
 
+use serde::Deserialize;
+
 pub type PlayerId = String;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Player {
+    #[serde(rename = "playerId")]
     pub player_id: PlayerId,
     pub name: String,
     pub level: i32,

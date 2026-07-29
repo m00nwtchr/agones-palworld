@@ -14,6 +14,9 @@ pub enum AppError {
     #[error("palworld timeout after {0}s")]
     PalworldTimeout(u64),
 
+    #[error("http: {0}")]
+    Http(#[from] reqwest::Error),
+
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 

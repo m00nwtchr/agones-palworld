@@ -12,7 +12,7 @@ Five adjustments to the v0.1.0 implementation, plus two follow-on corrections fr
 1. **clap for config** — replace `std::env::var` with clap derive API; CLI flags accepted alongside env vars.
 2. **`FROM scratch` runtime** — Dockerfile goes from distroless/cc-debian12 to `scratch`, requiring musl + static linking.
 3. **`/healthz` endpoint on the sidecar** — Kubernetes liveness/readiness probe target; checks both the sidecar itself and the Palworld REST API (IPv4 only).
-4. **Dualstack default bind** — metrics HTTP listener binds `[::]` (IPv6 wildcard, accepts IPv4 via Linux's `IPV6_V6ONLY=0`); metrics service uses `ipFamilyPolicy: PreferDualStack`. **Game service stays IPv4-only** because the Palworld server is IPv4 only.
+4. **Dualstack process bind, cluster-default Service** — metrics HTTP listener binds `[::]` (IPv6 wildcard, accepts IPv4 via Linux's `IPV6_V6ONLY=0`). Metrics Service leaves `ipFamilyPolicy` and `ipFamilies` unset (cluster default — dualstack on modern K8s, single-stack on older). **Game service stays IPv4-only** because the Palworld server is IPv4 only.
 5. **Single image tag (no separate digest field)** — `image.tag` carries the `version@sha256:digest` string; the `digest` field is removed.
 
 Additional clarifications:
@@ -30,7 +30,7 @@ Additional clarifications:
 1. **Configuration via clap** — operators can pass `--api-url http://...` on the CLI while the same env var continues to work for containers.
 2. **`FROM scratch` image** — minimal CVE surface; statically-linked musl binary.
 3. **Kubernetes-native healthcheck** — `/healthz` endpoint that reflects both the sidecar process and the Palworld API.
-4. **Dualstack metrics, IPv4 game** — metrics endpoint reachable via v4 and v6; game service stays v4 to match the game server.
+4. **Dualstack metrics process bind, IPv4 game** — metrics HTTP listener reachable via v4 and v6 at the bind layer; metrics Service uses cluster-default IP family; game service stays v4 to match the game server.
 5. **Single image tag** — `image.repository` defaults in the chart; `image.tag` is the moving part.
 6. **UID 999 everywhere** — Pod, both containers, sidecar user in `FROM scratch`.
 
@@ -60,7 +60,7 @@ Additional clarifications:
 +---------------------+
 ```
 
-Outside the pod, the **game UDP Service** is `ipFamilyPolicy: SingleStack, ipFamilies: [IPv4]`; the **metrics Service** is `ipFamilyPolicy: PreferDualStack, ipFamilies: [IPv6, IPv4]`.
+Outside the pod, the **game UDP Service** is `ipFamilyPolicy: SingleStack, ipFamilies: [IPv4]`. The **metrics Service** leaves `ipFamilyPolicy`/`ipFamilies` unset (Kubernetes applies the cluster default — typically dualstack on modern clusters).
 
 ## 6. Module-level changes (Rust)
 
@@ -137,8 +137,8 @@ metrics:
   service:
     enabled: true
     type: ClusterIP
-    ipFamilyPolicy: PreferDualStack # metrics listener binds [::]
-    ipFamilies: [IPv6, IPv4]
+    # ipFamilyPolicy / ipFamilies intentionally omitted — cluster default
+    # applies. The listener bind on [::] makes the endpoint dualstack regardless.
     port: 9090
 ```
 

@@ -92,8 +92,6 @@ metrics:
   service:
     enabled: true
     type: ClusterIP
-    ipFamilyPolicy: PreferDualStack
-    ipFamilies: [IPv6, IPv4]
     port: 9090
     annotations: { }
     labels: { }

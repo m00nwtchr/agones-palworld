@@ -14,46 +14,54 @@ fleet:
       annotations:
         agones.dev/sdk-server: agones-sidecar
     spec:
+      # Agones GameServer-specific fields (top-level of spec.template.spec)
+      container: palworld
       ports:
         - { name: game, portPolicy: None, containerPort: 8211, protocol: UDP }
       health: { periodSeconds: 2, failureThreshold: 3 }
       sdkServer: { grpcPort: 9358, httpPort: 9359 }
-      containers:
-        - name: palworld
-          image: PLACEHOLDER_REPLACED_BY_TEMPLATE
-          imagePullPolicy: IfNotPresent
-          command: ["/bin/bash", "/scripts/patch-palworld-settings.sh"]
-          args: ["-port=8211", "-useperfthreads", "-NoAsyncLoadingThread", "-UseMultithreadForDS"]
-          env:
-            - name: PALWORLD_RESTAPI_ENABLED
-              value: "True"
-          envFrom:
-            - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
-          ports:
-            - { name: game, containerPort: 8211, protocol: UDP }
-            - { name: rest, containerPort: 8211, protocol: TCP }
-          volumeMounts:
-            - { name: scripts, mountPath: /scripts }
-            - { name: savegames, mountPath: /pal/Package/Pal/Saved }
-        - name: agones-sidecar
-          image: PLACEHOLDER_REPLACED_BY_TEMPLATE
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: PALWORLD_ADMIN_PASSWORD
-              valueFrom: { secretKeyRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE, key: palworld_admin_password } }
-            - name: PALWORLD_API_URL
-              value: "http://localhost:8211"
-            - name: POD_NAME
-              valueFrom: { fieldRef: { fieldPath: metadata.name } }
-            - name: POD_NAMESPACE
-              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
-          ports:
-            - { name: metrics, containerPort: 9090, protocol: TCP }
-      volumes:
-        - name: scripts
-          configMap: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
-        - name: savegames
-          persistentVolumeClaim: { claimName: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+      # PodTemplateSpec wraps the standard K8s pod spec (containers, volumes, etc.)
+      template:
+        metadata:
+          labels:
+            agones.dev/sdk-server: agones-sidecar
+        spec:
+          containers:
+            - name: palworld
+              image: PLACEHOLDER_REPLACED_BY_TEMPLATE
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/bash", "/scripts/patch-palworld-settings.sh"]
+              args: ["-port=8211", "-useperfthreads", "-NoAsyncLoadingThread", "-UseMultithreadForDS"]
+              env:
+                - name: PALWORLD_RESTAPI_ENABLED
+                  value: "True"
+              envFrom:
+                - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+              ports:
+                - { name: game, containerPort: 8211, protocol: UDP }
+                - { name: rest, containerPort: 8211, protocol: TCP }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts }
+                - { name: savegames, mountPath: /pal/Package/Pal/Saved }
+            - name: agones-sidecar
+              image: PLACEHOLDER_REPLACED_BY_TEMPLATE
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PALWORLD_ADMIN_PASSWORD
+                  valueFrom: { secretKeyRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE, key: palworld_admin_password } }
+                - name: PALWORLD_API_URL
+                  value: "http://127.0.0.1:8211"
+                - name: POD_NAME
+                  valueFrom: { fieldRef: { fieldPath: metadata.name } }
+                - name: POD_NAMESPACE
+                  valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+              ports:
+                - { name: metrics, containerPort: 9090, protocol: TCP }
+          volumes:
+            - name: scripts
+              configMap: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
+            - name: savegames
+              persistentVolumeClaim: { claimName: PLACEHOLDER_REPLACED_BY_TEMPLATE }
 
 palworld:
   image:

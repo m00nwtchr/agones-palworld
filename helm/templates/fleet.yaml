@@ -1,4 +1,115 @@
-{{- include "agones-palworld.validate" . }}
+{{- /* Build the full Fleet spec as one dict, then toYaml it once. */}}
+{{- /* GameServer-specific (top-of-spec-template-spec) fields. */}}
+{{- $gsFields := dict }}
+{{- with .Values.fleet.template.spec.container }}
+{{- $_ := set $gsFields "container" . }}
+{{- end }}
+{{- with .Values.fleet.template.spec.ports }}
+{{- $_ := set $gsFields "ports" . }}
+{{- end }}
+{{- with .Values.fleet.template.spec.health }}
+{{- $_ := set $gsFields "health" . }}
+{{- end }}
+{{- with .Values.fleet.template.spec.sdkServer }}
+{{- $_ := set $gsFields "sdkServer" . }}
+{{- end }}
+{{- /* Build the containers list with overrides. */}}
+{{- $containers := list }}
+{{- range $c := .Values.fleet.template.spec.template.spec.containers }}
+  {{- if eq $c.name "palworld" }}
+    {{- $c := deepCopy $c }}
+    {{- $_ := set $c "image" (printf "%s:%s" $.Values.palworld.image.repository $.Values.palworld.image.tag) }}
+    {{- $_ := set $c "imagePullPolicy" $.Values.palworld.image.pullPolicy }}
+    {{- if $.Values.palworld.env }}
+      {{- $extra := list }}
+      {{- range $k, $v := $.Values.palworld.env }}
+        {{- $extra = append $extra (dict "name" $k "value" $v) }}
+      {{- end }}
+      {{- $_ := set $c "env" (concat (default list $c.env) $extra) }}
+    {{- end }}
+    {{- $secretName := "" }}
+    {{- if $.Values.secret.existingSecret }}
+      {{- $secretName = $.Values.secret.existingSecret }}
+    {{- else }}
+      {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
+    {{- end }}
+    {{- $envFromList := list (dict "secretRef" (dict "name" $secretName)) }}
+    {{- with $.Values.palworld.envFrom }}
+      {{- $envFromList = concat $envFromList . }}
+    {{- end }}
+    {{- $_ := set $c "envFrom" $envFromList }}
+    {{- with $.Values.containerSecurityContext }}
+      {{- $_ := set $c "securityContext" . }}
+    {{- end }}
+    {{- $containers = append $containers $c }}
+  {{- else if eq $c.name "agones-sidecar" }}
+    {{- $c := deepCopy $c }}
+    {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository (default $.Chart.AppVersion $.Values.sidecar.image.tag)) }}
+    {{- $_ := set $c "imagePullPolicy" $.Values.sidecar.image.pullPolicy }}
+    {{- $secretName := "" }}
+    {{- if $.Values.secret.existingSecret }}
+      {{- $secretName = $.Values.secret.existingSecret }}
+    {{- else }}
+      {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
+    {{- end }}
+    {{- $newEnv := list }}
+    {{- range $c.env }}
+      {{- if eq .name "PALWORLD_API_URL" }}
+        {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://127.0.0.1:%d" (int $.Values.palworld.restPort))) }}
+      {{- else if eq .name "PALWORLD_ADMIN_PASSWORD" }}
+        {{- $newEnv = append $newEnv (dict "name" "PALWORLD_ADMIN_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" $secretName "key" $.Values.secret.passwordKey))) }}
+      {{- else }}
+        {{- $newEnv = append $newEnv . }}
+      {{- end }}
+    {{- end }}
+    {{- with $.Values.sidecar.env }}
+      {{- range $k, $v := . }}
+        {{- $newEnv = append $newEnv (dict "name" $k "value" $v) }}
+      {{- end }}
+    {{- end }}
+    {{- $_ := set $c "env" $newEnv }}
+    {{- if $.Values.sidecar.envFrom }}
+      {{- $_ := set $c "envFrom" $.Values.sidecar.envFrom }}
+    {{- end }}
+    {{- with $.Values.containerSecurityContext }}
+      {{- $_ := set $c "securityContext" . }}
+    {{- end }}
+    {{- $containers = append $containers $c }}
+  {{- else }}
+    {{- with $.Values.containerSecurityContext }}
+      {{- $_ := set $c "securityContext" . }}
+    {{- end }}
+    {{- $containers = append $containers $c }}
+  {{- end }}
+{{- end }}
+{{- /* Build volumes list with overrides. */}}
+{{- $volumes := list }}
+{{- range $v := .Values.fleet.template.spec.template.spec.volumes }}
+  {{- $v := deepCopy $v }}
+  {{- if eq $v.name "scripts" }}
+    {{- $_ := set $v "configMap" (dict "name" (printf "%s-config" (include "agones-palworld.fullname" $))) }}
+  {{- else if eq $v.name "savegames" }}
+    {{- $claimName := "" }}
+    {{- if $.Values.pvc.existingClaim }}
+      {{- $claimName = $.Values.pvc.existingClaim }}
+    {{- else }}
+      {{- $claimName = printf "%s-savegames" (include "agones-palworld.fullname" $) }}
+    {{- end }}
+    {{- $_ := set $v "persistentVolumeClaim" (dict "claimName" $claimName) }}
+  {{- end }}
+  {{- $volumes = append $volumes $v }}
+{{- end }}
+{{- /* Build the PodSpec (container list + volumes + pod-level fields). */}}
+{{- $podSpec := dict "containers" $containers "volumes" $volumes }}
+{{- range $k, $v := .Values.fleet.template.spec.template.spec }}
+  {{- if not (or (eq $k "containers") (eq $k "volumes")) }}
+    {{- $_ := set $podSpec $k $v }}
+  {{- end }}
+{{- end }}
+{{- with $.Values.pod.securityContext }}
+  {{- $_ := set $podSpec "securityContext" . }}
+{{- end }}
+{{- /* Compose the full Fleet spec, then render once. */}}
 apiVersion: agones.dev/v1
 kind: Fleet
 metadata:
@@ -14,99 +125,10 @@ spec:
     metadata:
       {{- toYaml .Values.fleet.template.metadata | nindent 6 }}
     spec:
-      {{- /* Override chart-managed placeholders (image refs, env, envFrom, volume refs). */}}
-      {{- $containers := list }}
-      {{- range $c := .Values.fleet.template.spec.containers }}
-        {{- if eq $c.name "palworld" }}
-          {{- $c := deepCopy $c }}
-          {{- $_ := set $c "image" (printf "%s:%s" $.Values.palworld.image.repository $.Values.palworld.image.tag) }}
-          {{- $_ := set $c "imagePullPolicy" $.Values.palworld.image.pullPolicy }}
-          {{- $palworldEnv := $.Values.palworld.env }}
-          {{- if $palworldEnv }}
-            {{- $extra := list }}
-            {{- range $k, $v := $palworldEnv }}
-              {{- $extra = append $extra (dict "name" $k "value" $v) }}
-            {{- end }}
-            {{- $_ := set $c "env" (concat (default list $c.env) $extra) }}
-          {{- end }}
-          {{- $secretName := "" }}
-          {{- if $.Values.secret.existingSecret }}
-            {{- $secretName = $.Values.secret.existingSecret }}
-          {{- else }}
-            {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
-          {{- end }}
-          {{- $envFromList := list (dict "secretRef" (dict "name" $secretName)) }}
-          {{- with $.Values.palworld.envFrom }}
-            {{- $envFromList = concat $envFromList . }}
-          {{- end }}
-          {{- $_ := set $c "envFrom" $envFromList }}
-          {{- with $.Values.containerSecurityContext }}
-          {{- $_ := set $c "securityContext" . }}
-          {{- end }}
-          {{- $containers = append $containers $c }}
-        {{- else if eq $c.name "agones-sidecar" }}
-          {{- $c := deepCopy $c }}
-          {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository (default $.Chart.AppVersion $.Values.sidecar.image.tag)) }}
-          {{- $_ := set $c "imagePullPolicy" $.Values.sidecar.image.pullPolicy }}
-          {{- $secretName := "" }}
-          {{- if $.Values.secret.existingSecret }}
-            {{- $secretName = $.Values.secret.existingSecret }}
-          {{- else }}
-            {{- $secretName = printf "%s-admin" (include "agones-palworld.fullname" $) }}
-          {{- end }}
-          {{- $newEnv := list }}
-          {{- range $c.env }}
-            {{- if eq .name "PALWORLD_API_URL" }}
-              {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://127.0.0.1:%d" (int $.Values.palworld.restPort))) }}
-            {{- else if eq .name "PALWORLD_ADMIN_PASSWORD" }}
-              {{- $newEnv = append $newEnv (dict "name" "PALWORLD_ADMIN_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" $secretName "key" $.Values.secret.passwordKey))) }}
-            {{- else }}
-              {{- $newEnv = append $newEnv . }}
-            {{- end }}
-          {{- end }}
-          {{- with $.Values.sidecar.env }}
-            {{- range $k, $v := . }}
-              {{- $newEnv = append $newEnv (dict "name" $k "value" $v) }}
-            {{- end }}
-          {{- end }}
-          {{- $_ := set $c "env" $newEnv }}
-          {{- if $.Values.sidecar.envFrom }}
-            {{- $_ := set $c "envFrom" $.Values.sidecar.envFrom }}
-          {{- end }}
-          {{- with $.Values.containerSecurityContext }}
-          {{- $_ := set $c "securityContext" . }}
-          {{- end }}
-          {{- $containers = append $containers $c }}
-        {{- else }}
-          {{- with $.Values.containerSecurityContext }}
-          {{- $_ := set $c "securityContext" . }}
-          {{- end }}
-          {{- $containers = append $containers $c }}
-        {{- end }}
-      {{- end }}
-      {{- $volumes := list }}
-      {{- range $v := .Values.fleet.template.spec.volumes }}
-        {{- $v := deepCopy $v }}
-        {{- if eq $v.name "scripts" }}
-          {{- $_ := set $v "configMap" (dict "name" (printf "%s-config" (include "agones-palworld.fullname" $))) }}
-        {{- else if eq $v.name "savegames" }}
-          {{- $claimName := "" }}
-          {{- if $.Values.pvc.existingClaim }}
-            {{- $claimName = $.Values.pvc.existingClaim }}
-          {{- else }}
-            {{- $claimName = printf "%s-savegames" (include "agones-palworld.fullname" $) }}
-          {{- end }}
-          {{- $_ := set $v "persistentVolumeClaim" (dict "claimName" $claimName) }}
-        {{- end }}
-        {{- $volumes = append $volumes $v }}
-      {{- end }}
-      {{- $spec := dict "containers" $containers "volumes" $volumes }}
-      {{- range $k, $v := $.Values.fleet.template.spec }}
-        {{- if not (or (eq $k "containers") (eq $k "volumes")) }}
-          {{- $_ := set $spec $k $v }}
-        {{- end }}
-      {{- end }}
-      {{- with $.Values.pod.securityContext }}
-      {{- $_ := set $spec "securityContext" . }}
-      {{- end }}
-      {{- toYaml $spec | nindent 6 }}
+      {{- toYaml $gsFields | nindent 6 }}
+      template:
+        metadata:
+          labels:
+            agones.dev/sdk-server: agones-sidecar
+        spec:
+          {{- toYaml $podSpec | nindent 10 }}

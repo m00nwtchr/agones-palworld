@@ -1,0 +1,128 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. 0.2.0). Defaults to git tag for tag-triggered runs.'
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: publish-sidecar-and-chart
+    runs-on: ubuntu-22.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install-nix
+        uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          cachix.pull: m00nwtchr
+
+      - name: quality-gate
+        run: |
+          nix develop --command -- bash -c '
+            set -euo pipefail
+            cd "$GITHUB_WORKSPACE"
+            cargo fmt --all --check
+            cargo clippy --all-targets -- -D warnings
+            cargo test
+            helm lint helm \
+              --set "palworld.image.tag=v0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            shellcheck scripts/*.sh
+          '
+
+      - name: resolve-version
+        id: version
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "version=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            version="${GITHUB_REF#refs/tags/v}"
+            echo "version=${version}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: setup-qemu
+        uses: docker/setup-qemu-action@v3
+
+      - name: setup-buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: login-ghcr-image
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build-and-push-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/m00nwtchr/agones-palworld:${{ steps.version.outputs.version }}
+            ghcr.io/m00nwtchr/agones-palworld:latest
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: setup-helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.16.2
+
+      - name: login-ghcr-oci
+        run: |
+          mkdir -p ~/.config/helm
+          AUTH_B64=$(printf '%s' '${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)
+          cat > ~/.config/helm/registry/config.json <<EOF
+          {
+            "auths": {
+              "ghcr.io": {
+                "auth": "${AUTH_B64}"
+              }
+            }
+          }
+          EOF
+
+      - name: helm-package
+        run: |
+          mkdir -p /tmp/chart
+          nix develop --command -- bash -c "
+            cd \"\$GITHUB_WORKSPACE\"
+            helm package helm -d /tmp/chart
+          "
+          ls -la /tmp/chart
+
+      - name: helm-push
+        if: success()
+        run: |
+          nix develop --command -- bash -c "
+            cd \"\$GITHUB_WORKSPACE\"
+            TPL=oci://ghcr.io/m00nwtchr/charts/palworld
+            helm push /tmp/chart/agones-palworld-${{ steps.version.outputs.version }}.tgz \$TPL
+          "
+
+      - name: github-release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

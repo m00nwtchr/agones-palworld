@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use agones_palworld::config::Config;
 use agones_palworld::observability::{self, install};
-use opentelemetry::metrics::MeterProvider as _;
 use serial_test::serial;
 
 fn unique_metrics_port() -> u16 {

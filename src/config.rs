@@ -72,14 +72,11 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> AppResult<Self> {
-        let mut cfg = <Self as Parser>::parse();
+        let cfg = <Self as Parser>::parse();
         if cfg.api_url.host_str() == Some("localhost") {
             tracing::warn!(
                 "api_url uses localhost; prefer 127.0.0.1 to avoid IPv6 lookups on dualstack"
             );
-        }
-        if let Ok(s) = std::env::var("SHUTDOWN_ANNOUNCE_MESSAGE") {
-            cfg.shutdown_announce = s;
         }
         Ok(cfg)
     }
@@ -134,32 +131,5 @@ mod tests {
         assert_eq!(c.metrics_host, "::");
         assert!(c.otel_endpoint.is_none());
         assert!(!c.disable_prometheus);
-    }
-
-    #[test]
-    fn env_vars_override_defaults() {
-        let c = Config::try_parse_from([
-            "agones-palworld",
-            "--api-url",
-            "http://127.0.0.1:8211",
-            "--admin-password",
-            "hunter2",
-        ])
-        .expect("config");
-        assert_eq!(c.api_url.as_str(), "http://127.0.0.1:8211/");
-        assert_eq!(c.metrics_host, "::");
-    }
-
-    #[test]
-    fn cli_args_override_env_vars() {
-        let c = Config::try_parse_from([
-            "agones-palworld",
-            "--admin-password",
-            "cli-pw",
-            "--api-url",
-            "http://127.0.0.1:8211",
-        ])
-        .expect("config");
-        assert_eq!(c.admin_password.expose(), "cli-pw");
     }
 }

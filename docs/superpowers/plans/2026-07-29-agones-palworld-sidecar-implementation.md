@@ -6,11 +6,11 @@
 
 **Architecture:** Single Rust binary crate. The sidecar connects to the Agones SDK on `localhost:9358`, polls the Palworld REST API on `http://localhost:${palworld.restPort}` (default 8211), and surfaces player state via Agones Counters + Lists (no labels). OpenTelemetry traces + Prometheus-scrapeable metrics on `:9090`. Modern modular layout: `config`, `palworld`, `agones`, `state`, `shutdown`, `observability`, `error`, `main`.
 
-**Tech Stack:** Rust 1.82+, Tokio 1.32, `agones` SDK 1.34, `reqwest` 0.12, OpenTelemetry 0.27 (OTLP + Prometheus exporter), `tracing` 0.1, Helm 3.x, Kubernetes 1.30+ with Agones + Prometheus Operator.
+**Tech Stack:** Rust stable (1.97 at design time, MSRV tracks latest stable via `rust-toolchain.toml`), Tokio 1.32, `agones` SDK 1.34, `reqwest` 0.12, OpenTelemetry 0.27 (OTLP + Prometheus exporter), `tracing` 0.1, Helm 3.x, Kubernetes 1.30+ with Agones + Prometheus Operator.
 
 ## Global Constraints
 
-- **Rust edition:** 2021, MSRV 1.82 (per Dockerfile).
+- **Rust edition:** 2024, channel `stable` (matches `rust-toolchain.toml`). `rust-version` in `Cargo.toml` tracks latest stable at the time of authoring.
 - **Dependency pinning:** versions from `docs/superpowers/specs/2026-07-29-agones-palworld-sidecar-design.md §15`.
 - **Quality gates:** `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` must all pass before each commit.
 - **No comments in source code** unless explicitly required for safety (e.g., `#[instrument]` span description).
@@ -90,8 +90,8 @@ agones-palworld/
 name = "agones-palworld"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
-license = "MIT OR Apache-2.0"
+rust-version = "1.97"
+license = "MPL-2.0"
 
 [lib]
 path = "src/lib.rs"
@@ -1638,7 +1638,7 @@ git commit -m "feat(main): wire config → observability → poll → health →
 
 ```dockerfile
 # syntax=docker/dockerfile:1.7
-FROM rust:1.82-bookworm AS builder
+FROM rust:stable-bookworm AS builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*

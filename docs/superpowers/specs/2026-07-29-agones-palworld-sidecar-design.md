@@ -569,7 +569,7 @@ pods.
 **Multi-stage Dockerfile:**
 
 ```dockerfile
-FROM rust:1.82-bookworm AS builder
+FROM rust:stable-bookworm AS builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*

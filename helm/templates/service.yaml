@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agones-palworld.fullname" . }}
+  labels:
+    {{- include "agones-palworld.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if eq .Values.service.type "Headless" }}
+  clusterIP: None
+  {{- end }}
+  ports:
+    - name: {{ .Values.service.protocol | lower }}
+      port: {{ .Values.service.port }}
+      targetPort: game
+      protocol: {{ .Values.service.protocol }}
+  selector:
+    {{- include "agones-palworld.selectorLabels" . | nindent 4 }}
+    agones.dev/fleet: {{ include "agones-palworld.fullname" . | quote }}

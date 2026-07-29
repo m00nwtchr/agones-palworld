@@ -1,0 +1,26 @@
+{{- if and .Values.metrics.serviceMonitor.enabled .Values.metrics.service.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "agones-palworld.fullname" . }}-metrics
+  labels:
+    {{- include "agones-palworld.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ default .Release.Namespace .Values.metrics.serviceMonitor.namespaceSelector }}
+  selector:
+    matchLabels:
+      {{- include "agones-palworld.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metrics
+  endpoints:
+    - port: http-metrics
+      path: {{ .Values.metrics.serviceMonitor.path | default "/metrics" }}
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      scheme: {{ .Values.metrics.serviceMonitor.scheme | default "HTTP" }}
+      honorLabels: {{ .Values.metrics.serviceMonitor.honorLabels | default false }}
+{{- end }}

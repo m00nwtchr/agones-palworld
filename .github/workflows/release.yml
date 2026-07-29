@@ -38,7 +38,9 @@ jobs:
       - name: install-devenv
         shell: bash
         run: |
-          nix profile add nixpkgs#devenv
+          # devenv is a flake, not a nixpkgs attribute (since ~2.0). Install
+          # the `devenv` output from the upstream flake repo.
+          nix profile add github:cachix/devenv#devenv --refresh --accept-flake-config
           devenv version || true
 
       - name: quality-gate

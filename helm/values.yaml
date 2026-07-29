@@ -31,6 +31,7 @@ fleet:
             - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
           ports:
             - { name: game, containerPort: 8211, protocol: UDP }
+            - { name: rest, containerPort: 8211, protocol: TCP }
           volumeMounts:
             - { name: scripts, mountPath: /scripts }
             - { name: savegames, mountPath: /pal/Package/Pal/Saved }

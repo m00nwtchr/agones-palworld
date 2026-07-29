@@ -197,9 +197,7 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
     let server_shutdown = if cfg.disable_prometheus {
         tokio::sync::watch::channel(false).0
     } else {
-        let addr: SocketAddr = format!("{}:{}", cfg.metrics_host, cfg.metrics_port)
-            .parse()
-            .map_err(|e| AppError::Config(format!("invalid METRICS_HOST:PORT: {e}")))?;
+        let addr = cfg.metrics_address;
         let (tx, rx) = tokio::sync::watch::channel(false);
         let registry = prom_registry.clone();
         let health = m.palworld_health.clone();

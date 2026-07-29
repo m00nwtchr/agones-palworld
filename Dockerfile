@@ -1,26 +1,28 @@
 # syntax=docker/dockerfile:1.7
-FROM rust:bookworm AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    musl-tools pkg-config libssl-dev ca-certificates protobuf-compiler && rm -rf /var/lib/apt/lists/*
-RUN rustup target add x86_64-unknown-linux-musl
-RUN echo 'palworld:x:999:999:palworld:/:/sbin/nologin' >> /etc/passwd
-ENV RUSTFLAGS="-C target-feature=+crt-static"
-WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src && \
-    echo 'fn main() {}' > src/main.rs && \
-    echo '' > src/lib.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl --locked && \
-    rm -rf src target/x86_64-unknown-linux-musl/release/deps/agones_palworld*
-COPY src ./src
-RUN touch src/main.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl --locked && \
-    strip target/x86_64-unknown-linux-musl/release/agones-palworld
+FROM clux/muslrust:stable AS chef
+USER root
+RUN cargo install --locked cargo-chef
+WORKDIR /app
 
-FROM scratch
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/agones-palworld /agones-palworld
-COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN printf '#!/bin/sh\nexec /usr/bin/protoc -I/usr/include "$@"\n' > /usr/local/bin/protoc \
+    && chmod +x /usr/local/bin/protoc
+
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json
+COPY . .
+RUN cargo build --release --target x86_64-unknown-linux-musl --bin agones-palworld
+
+FROM scratch AS runtime
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/agones-palworld /
 USER 999:999
-EXPOSE 9090
-ENTRYPOINT ["/agones-palworld"]
+CMD ["/agones-palworld"]

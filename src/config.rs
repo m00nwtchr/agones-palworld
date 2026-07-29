@@ -1,6 +1,8 @@
 #![allow(unsafe_code)]
 #![allow(clippy::result_large_err)]
 
+use std::net::SocketAddr;
+
 use clap::Parser;
 use url::Url;
 
@@ -61,10 +63,8 @@ pub struct Config {
         default_value = "Server shutting down"
     )]
     pub shutdown_announce: String,
-    #[arg(long, env = "METRICS_PORT", default_value_t = 9090)]
-    pub metrics_port: u16,
-    #[arg(long, env = "METRICS_HOST", default_value = "::")]
-    pub metrics_host: String,
+    #[arg(long, env = "METRICS_ADDRESS", default_value = "[::]:9090")]
+    pub metrics_address: SocketAddr,
     #[arg(long, env = "DISABLE_PROMETHEUS", default_value_t = false)]
     pub disable_prometheus: bool,
     #[arg(long, env = "OTEL_EXPORTER_OTLP_ENDPOINT")]

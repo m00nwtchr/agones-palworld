@@ -63,3 +63,33 @@ async fn shutdown_sends_waittime_and_message() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn save_posts_to_endpoint() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/save"))
+        .and(header("authorization", "Basic Omh1bnRlcjI="))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    client_for(&server.uri()).save().await.unwrap();
+}
+
+#[tokio::test]
+async fn announce_posts_message_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/announce"))
+        .and(header("authorization", "Basic Omh1bnRlcjI="))
+        .and(header("content-type", "application/json"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    client_for(&server.uri())
+        .announce("maintenance in 5 minutes")
+        .await
+        .unwrap();
+}

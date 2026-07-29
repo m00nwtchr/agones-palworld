@@ -17,3 +17,5 @@ Cargo.lock.bak
 # IDE
 .idea/
 .vscode/
+.worktrees/
+worktrees/

@@ -103,14 +103,17 @@ impl std::str::FromStr for SecretString {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn requires_admin_password_via_cli_or_env() {
         let err = Config::try_parse_from(["agones-palworld"]).unwrap_err();
         assert!(err.to_string().contains("admin-password"), "got: {err}");
     }
 
     #[test]
+    #[serial]
     fn reads_all_values_from_cli() {
         let c = Config::try_parse_from([
             "agones-palworld",
@@ -136,6 +139,43 @@ mod tests {
         assert_eq!(c.metrics_host, "::");
         assert!(c.otel_endpoint.is_none());
         assert!(!c.disable_prometheus);
+    }
+
+    #[test]
+    #[serial]
+    fn env_vars_override_defaults() {
+        unsafe {
+            std::env::set_var("PALWORLD_API_URL", "http://127.0.0.1:8211");
+            std::env::set_var("PALWORLD_ADMIN_PASSWORD", "hunter2");
+        }
+        let c = Config::parse_from(["agones-palworld"]);
+        assert_eq!(c.api_url.as_str(), "http://127.0.0.1:8211/");
+        assert_eq!(c.metrics_host, "::");
+        unsafe {
+            std::env::remove_var("PALWORLD_API_URL");
+            std::env::remove_var("PALWORLD_ADMIN_PASSWORD");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn cli_args_override_env_vars() {
+        unsafe {
+            std::env::set_var("PALWORLD_API_URL", "http://127.0.0.1:8211");
+            std::env::set_var("PALWORLD_ADMIN_PASSWORD", "env-pw");
+        }
+        let c = Config::parse_from([
+            "agones-palworld",
+            "--admin-password",
+            "cli-pw",
+            "--api-url",
+            "http://127.0.0.1:8211",
+        ]);
+        assert_eq!(c.admin_password.expose(), "cli-pw");
+        unsafe {
+            std::env::remove_var("PALWORLD_API_URL");
+            std::env::remove_var("PALWORLD_ADMIN_PASSWORD");
+        }
     }
 
     #[test]

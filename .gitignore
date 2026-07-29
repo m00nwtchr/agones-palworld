@@ -9,6 +9,11 @@ devenv.local.yaml
 # pre-commit
 .pre-commit-config.yaml
 
-# cargo
+# Rust
 target/
+**/*.rs.bk
 Cargo.lock.bak
+
+# IDE
+.idea/
+.vscode/

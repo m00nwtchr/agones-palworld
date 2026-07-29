@@ -57,6 +57,7 @@ fleet:
 palworld:
   image:
     repository: ghcr.io/pocketpairjp/palserver
+    # tag format: "vX.Y.Z" (or "vX.Y.Z@sha256:<digest>" to pin).
     tag: ""
     pullPolicy: IfNotPresent
   restPort: 8211
@@ -67,8 +68,8 @@ palworld:
 sidecar:
   image:
     repository: ghcr.io/m00nwtchr/agones-palworld
+    # tag format: "X.Y.Z" (or "X.Y.Z@sha256:<digest>" to pin); defaults to chart AppVersion when empty.
     tag: ""
-    digest: ""
     pullPolicy: IfNotPresent
   pollIntervalSeconds: 5
   healthIntervalSeconds: 2

@@ -43,14 +43,7 @@ spec:
           {{- $containers = append $containers $c }}
         {{- else if eq $c.name "agones-sidecar" }}
           {{- $c := deepCopy $c }}
-          {{- $sidecarTag := default $.Chart.AppVersion $.Values.sidecar.image.tag }}
-          {{- if and $.Values.sidecar.image.digest $sidecarTag }}
-            {{- $_ := set $c "image" (printf "%s:%s@%s" $.Values.sidecar.image.repository $sidecarTag $.Values.sidecar.image.digest) }}
-          {{- else if $.Values.sidecar.image.digest }}
-            {{- $_ := set $c "image" (printf "%s@%s" $.Values.sidecar.image.repository $.Values.sidecar.image.digest) }}
-          {{- else }}
-            {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository $sidecarTag) }}
-          {{- end }}
+          {{- $_ := set $c "image" (printf "%s:%s" $.Values.sidecar.image.repository (default $.Chart.AppVersion $.Values.sidecar.image.tag)) }}
           {{- $_ := set $c "imagePullPolicy" $.Values.sidecar.image.pullPolicy }}
           {{- $secretName := "" }}
           {{- if $.Values.secret.existingSecret }}

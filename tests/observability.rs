@@ -21,8 +21,7 @@ fn make_cfg(port: u16) -> Config {
         shutdown_save_timeout_secs: 30,
         shutdown_waittime_secs: 30,
         shutdown_announce: "bye".into(),
-        metrics_port: port,
-        metrics_host: "127.0.0.1".into(),
+        metrics_address: format!("127.0.0.1:{port}").parse().unwrap(),
         disable_prometheus: false,
         otel_endpoint: None,
         pod_name: "test-pod".into(),
@@ -77,7 +76,6 @@ async fn install_skips_server_when_disabled() {
     let port = unique_metrics_port();
     let cfg = Config {
         disable_prometheus: true,
-        metrics_port: port,
         ..make_cfg(port)
     };
     let (_metrics, guard) = install(&cfg).expect("install");

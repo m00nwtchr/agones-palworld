@@ -102,6 +102,8 @@ impl std::str::FromStr for SecretString {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv6Addr};
+
     use super::*;
     use serial_test::serial;
 
@@ -123,8 +125,8 @@ mod tests {
             "hunter2",
             "--poll-interval-secs",
             "5",
-            "--metrics-port",
-            "9090",
+            "--metrics-address",
+            "[::]:9090",
             "--pod-name",
             "palworld-0",
             "--pod-namespace",
@@ -133,10 +135,10 @@ mod tests {
         .expect("config");
         assert_eq!(c.api_url.as_str(), "http://127.0.0.1:8211/");
         assert_eq!(c.poll_interval_secs, 5);
-        assert_eq!(c.metrics_port, 9090);
+        assert_eq!(c.metrics_address.port(), 9090);
         assert_eq!(c.pod_name, "palworld-0");
         assert_eq!(c.pod_namespace, "games");
-        assert_eq!(c.metrics_host, "::");
+        assert_eq!(c.metrics_address.ip(), IpAddr::V6(Ipv6Addr::UNSPECIFIED));
         assert!(c.otel_endpoint.is_none());
         assert!(!c.disable_prometheus);
     }
@@ -150,7 +152,7 @@ mod tests {
         }
         let c = Config::parse_from(["agones-palworld"]);
         assert_eq!(c.api_url.as_str(), "http://127.0.0.1:8211/");
-        assert_eq!(c.metrics_host, "::");
+        assert_eq!(c.metrics_address.ip(), IpAddr::V6(Ipv6Addr::UNSPECIFIED));
         unsafe {
             std::env::remove_var("PALWORLD_API_URL");
             std::env::remove_var("PALWORLD_ADMIN_PASSWORD");

@@ -220,7 +220,7 @@ impl AgonesOps for Bridge {
         Box::pin(async move {
             sdk.ready()
                 .await
-                .map_err(|e| tracing::error!(error = %e, "sdk.set_ready failed"))
+                .map_err(|e| tracing::error!(error = %e, "sdk.ready (returning to Ready) failed"))
                 .ok();
         })
     }

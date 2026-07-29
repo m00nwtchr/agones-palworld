@@ -1,10 +1,24 @@
 #![allow(clippy::result_large_err)]
 
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::time::Instant;
+
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::service::service_fn;
+use hyper::{Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
 use opentelemetry::KeyValue;
 use opentelemetry::metrics::{Counter, Gauge};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::metrics::SdkMeterProvider;
-use prometheus::Registry;
+use opentelemetry_sdk::runtime;
+use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+use prometheus::{Encoder, Registry, TextEncoder};
+use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, prelude::*};
 
 use crate::config::Config;
@@ -54,10 +68,12 @@ pub struct Metrics {
 pub struct Guard {
     _provider: SdkMeterProvider,
     pub registry: Registry,
+    server_shutdown: tokio::sync::watch::Sender<bool>,
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
+        let _ = self.server_shutdown.send(true);
         opentelemetry::global::shutdown_tracer_provider();
     }
 }
@@ -77,19 +93,35 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
     let resource = build_resource(cfg);
 
     let prom_registry = Registry::new();
-
-    let exporter = opentelemetry_prometheus::exporter()
+    let prom_exporter = opentelemetry_prometheus::exporter()
         .with_registry(prom_registry.clone())
         .build()
         .map_err(|e| AppError::Config(format!("prometheus exporter: {e}")))?;
 
-    let provider = SdkMeterProvider::builder()
-        .with_resource(resource)
-        .with_reader(exporter)
-        .build();
+    let mut provider_builder = SdkMeterProvider::builder().with_resource(resource.clone());
+    if let Some(endpoint) = cfg.otel_endpoint.as_deref() {
+        let otlp_exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()
+            .map_err(|e| AppError::Config(format!("otlp metric exporter: {e}")))?;
+        let reader =
+            opentelemetry_sdk::metrics::PeriodicReader::builder(otlp_exporter, runtime::Tokio)
+                .build();
+        provider_builder = provider_builder.with_reader(reader);
+    }
+    provider_builder = provider_builder.with_reader(prom_exporter);
+    let provider = provider_builder.build();
     opentelemetry::global::set_meter_provider(provider.clone());
 
     let meter = opentelemetry::global::meter("agones-palworld");
+    let started = Instant::now();
+    let _ = meter
+        .u64_observable_gauge("palworld.sidecar.uptime_seconds")
+        .with_callback(move |observer| {
+            observer.observe(started.elapsed().as_secs(), &[]);
+        })
+        .build();
     let m = Metrics {
         poll_cycles: meter.u64_counter("palworld.sidecar.poll_cycles").build(),
         poll_errors: meter.u64_counter("palworld.sidecar.poll_errors").build(),
@@ -116,23 +148,136 @@ pub fn install(cfg: &Config) -> AppResult<(Metrics, Guard)> {
 
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,h2=warn,hyper=warn,agones=warn"));
-    let subscriber = tracing_subscriber::registry().with(filter);
-    match std::env::var("LOG_FORMAT").as_deref() {
-        Ok("json") => subscriber
-            .with(tracing_subscriber::fmt::layer().json())
-            .init(),
-        _ => subscriber
-            .with(tracing_subscriber::fmt::layer().pretty())
-            .init(),
+
+    let subscriber_builder = tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer());
+
+    if let Some(endpoint) = cfg.otel_endpoint.as_deref() {
+        let span_exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()
+            .map_err(|e| AppError::Config(format!("otlp span exporter: {e}")))?;
+        let tracer_provider = SdkTracerProvider::builder()
+            .with_resource(resource)
+            .with_batch_exporter(span_exporter, runtime::Tokio)
+            .build();
+        opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+        let tracer = tracer_provider.tracer("agones-palworld");
+        let _ = subscriber_builder
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .try_init();
+    } else {
+        match std::env::var("LOG_FORMAT").as_deref() {
+            Ok("json") => {
+                let _ = subscriber_builder
+                    .with(tracing_subscriber::fmt::layer().json())
+                    .try_init();
+            }
+            _ => {
+                let _ = subscriber_builder
+                    .with(tracing_subscriber::fmt::layer().pretty())
+                    .try_init();
+            }
+        }
     }
+
+    let server_shutdown = if cfg.disable_prometheus {
+        tokio::sync::watch::channel(false).0
+    } else {
+        let addr: SocketAddr = format!("{}:{}", cfg.metrics_host, cfg.metrics_port)
+            .parse()
+            .map_err(|e| AppError::Config(format!("invalid METRICS_HOST:PORT: {e}")))?;
+        let (tx, rx) = tokio::sync::watch::channel(false);
+        let registry = prom_registry.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_metrics_server(addr, registry, rx).await {
+                tracing::error!(error = %e, "metrics server exited");
+            }
+        });
+        tx
+    };
 
     Ok((
         m,
         Guard {
             _provider: provider,
             registry: prom_registry,
+            server_shutdown,
         },
     ))
+}
+
+async fn run_metrics_server(
+    addr: SocketAddr,
+    registry: Registry,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) -> AppResult<()> {
+    let listener = TcpListener::bind(addr)
+        .await
+        .map_err(|e| AppError::Config(format!("bind {addr}: {e}")))?;
+    tracing::info!(%addr, "metrics server listening");
+    loop {
+        tokio::select! {
+            _ = shutdown.changed() => {
+                if *shutdown.borrow() {
+                    break;
+                }
+            }
+            accept = listener.accept() => {
+                let (stream, _) = match accept {
+                    Ok(x) => x,
+                    Err(e) => {
+                        tracing::warn!(error=%e, "metrics accept failed");
+                        continue;
+                    }
+                };
+                let registry = registry.clone();
+                tokio::spawn(async move {
+                    let io = TokioIo::new(stream);
+                    let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
+                        let registry = registry.clone();
+                        async move { handle(req, &registry).await }
+                    });
+                    if let Err(e) = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(io, svc)
+                        .await
+                    {
+                        tracing::debug!(error=%e, "metrics conn ended");
+                    }
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle(
+    req: Request<hyper::body::Incoming>,
+    registry: &Registry,
+) -> Result<Response<Full<Bytes>>, Infallible> {
+    if req.method() != hyper::Method::GET || req.uri().path() != "/metrics" {
+        return Ok(Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Full::new(Bytes::from("not found")))
+            .expect("static response"));
+    }
+    let encoder = TextEncoder::new();
+    let metric_families = registry.gather();
+    let mut buf = Vec::new();
+    if let Err(e) = encoder.encode(&metric_families, &mut buf) {
+        tracing::warn!(error = %e, "metrics encode failed");
+        return Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Full::new(Bytes::from("encode failed")))
+            .expect("static response"));
+    }
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(hyper::header::CONTENT_TYPE, encoder.format_type())
+        .body(Full::new(Bytes::from(buf)))
+        .expect("static response"))
 }
 
 #[cfg(test)]

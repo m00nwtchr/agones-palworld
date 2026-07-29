@@ -29,11 +29,15 @@ prometheus = "0.13"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-opentelemetry = "0.28"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
 
 [dev-dependencies]
 wiremock = "0.6"
 rstest = "0.23"
 pretty_assertions = "1"
+serial_test = "3"
 
 [profile.release]
 strip = true

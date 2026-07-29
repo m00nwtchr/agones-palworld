@@ -1,0 +1,18 @@
+Palworld Fleet deployed.
+
+Game port:   {{ .Values.service.port }}/{{ .Values.service.protocol }}
+Metrics:     {{ .Values.metrics.service.enabled | ternary "enabled" "disabled" }}
+SMon:        {{ .Values.metrics.serviceMonitor.enabled | ternary "enabled" "disabled" }}
+
+{{- if .Values.secret.enabled }}
+
+Read the admin password:
+  kubectl get secret -n {{ .Release.Namespace }} {{ include "agones-palworld.fullname" . }}-admin \
+    -o jsonpath='{.data.{{ .Values.secret.passwordKey }}}' | base64 -d
+{{- else }}
+
+(secret is managed externally: {{ .Values.secret.existingSecret }})
+{{- end }}
+
+Game image tag: {{ .Values.palworld.image.tag }}
+Sidecar image:  {{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag }}{{ if .Values.sidecar.image.digest }}@{{ .Values.sidecar.image.digest }}{{ end }}

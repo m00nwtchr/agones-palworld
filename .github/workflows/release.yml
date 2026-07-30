@@ -93,18 +93,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The OCI image manifest has no top-level `digest` field — the image's
-          # content-addressable digest lives at `.config.digest`. Query that.
-          # Falling back to `.digest` keeps the step passing if the manifest
-          # shape ever changes; falling back to a sentinel "sha256:unknown"
-          # surfaces the failure instead of producing "0.1.0@null".
           digest=$(docker buildx imagetools inspect \
             "ghcr.io/m00nwtchr/agones-palworld:${{ steps.version.outputs.version }}" \
-            --raw | jq -r '.config.digest // .digest // "sha256:unknown"')
-          if [ "$digest" = "sha256:unknown" ] || [ -z "$digest" ]; then
-            echo "::error::Could not extract image digest from buildx output"
-            exit 1
-          fi
+            | awk '/Digest:/ {print $2; exit}')
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "Pinned image: ghcr.io/m00nwtchr/agones-palworld:${{ steps.version.outputs.version }}@${digest}"
 

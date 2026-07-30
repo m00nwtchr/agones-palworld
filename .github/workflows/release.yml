@@ -88,6 +88,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: extract-image-digest
+        id: digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect \
+            "ghcr.io/m00nwtchr/agones-palworld:${{ steps.version.outputs.version }}" \
+            --raw | jq -r '.digest')
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "Pinned image: ghcr.io/m00nwtchr/agones-palworld:${{ steps.version.outputs.version }}@${digest}"
+
       - name: setup-helm
         uses: azure/setup-helm@v3
         with:
@@ -101,18 +112,43 @@ jobs:
 
       - name: helm-package
         shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/chart
-          devenv shell -- bash -c 'set -euo pipefail; helm package helm -d /tmp/chart'
+          TAG_REF="${VERSION}@${DIGEST}"
+          echo "Packaging palworld ${VERSION} with sidecar image pinned to ${TAG_REF}"
+          # helm package doesn't support --set; we copy the chart, mutate
+          # the sidecar.image.tag in values.yaml with yq, then package the
+          # mutated copy. yq edits the YAML in-place without reformatting
+          # the rest of the file.
+          rm -rf /tmp/palworld-chart
+          cp -r helm /tmp/palworld-chart
+          yq -i ".sidecar.image.tag = \"${TAG_REF}\"" /tmp/palworld-chart/values.yaml
+          echo "--- sidecar.image.tag in packaged chart ---"
+          yq '.sidecar.image.tag' /tmp/palworld-chart/values.yaml
+          echo "--- palworld.image.tag (untouched, requires operator override) ---"
+          yq '.palworld.image.tag' /tmp/palworld-chart/values.yaml
+          devenv shell -- bash -c 'set -euo pipefail; \
+            helm package /tmp/palworld-chart -d /tmp/chart'
           ls -la /tmp/chart
+          # Sanity-check that the tgz actually contains the digest.
+          tar -xzOf "/tmp/chart/palworld-${VERSION}.tgz" palworld/values.yaml \
+            | grep "tag:" | head -5
 
       - name: helm-push
         if: success()
         shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          devenv shell -- bash -c "set -euo pipefail; helm push /tmp/chart/palworld-${{ steps.version.outputs.version }}.tgz oci://ghcr.io/m00nwtchr/charts/"
+          echo "Pushing /tmp/chart/palworld-${VERSION}.tgz to oci://ghcr.io/m00nwtchr/charts/palworld"
+          devenv shell -- bash -c "set -euo pipefail; \
+            helm push '/tmp/chart/palworld-${VERSION}.tgz' \
+              oci://ghcr.io/m00nwtchr/charts/"
 
       - name: github-release
         if: startsWith(github.ref, 'refs/tags/v')

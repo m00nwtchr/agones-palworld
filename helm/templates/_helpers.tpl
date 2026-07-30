@@ -37,9 +37,9 @@ or `helm template`. Each rule calls `fail` on violation, which aborts the render
 {{- fail "palworld.image.tag is required (format: \"vX.X.X\" or \"vX.X.X@sha256:digest\")." -}}
 {{- end -}}
 
-{{- if not .Values.sidecar.image.tag -}}
-{{- fail "sidecar.image.tag is required (defaults to chart appVersion; CI fills in the digest)." -}}
-{{- end -}}
+{{- /* sidecar.image.tag is provided by the chart (CI bakes the digest at package
+   time via the release workflow); the Fleet template's `default` falls back
+   to Chart.AppVersion when the value is empty, so no validation here. */ -}}
 
 {{- if not .Values.secret.enabled -}}
 {{- if not .Values.secret.existingSecret -}}

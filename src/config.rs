@@ -44,7 +44,7 @@ pub struct Config {
     #[arg(
         long,
         env = "PALWORLD_API_URL",
-        default_value = "http://127.0.0.1:8211"
+        default_value = "http://127.0.0.1:8212/v1/api/"
     )]
     pub api_url: Url,
     #[arg(long, env = "PALWORLD_ADMIN_PASSWORD")]

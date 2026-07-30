@@ -53,7 +53,7 @@ impl Client {
     }
 
     pub fn with_timeout(base_url: Url, password: &str, timeout_secs: u64) -> Self {
-        let auth = B64.encode(format!(":{password}"));
+        let auth = B64.encode(format!("admin:{password}"));
         let auth_header = HeaderValue::from_str(&format!("Basic {auth}")).expect("ascii");
         let http = Http::builder()
             .timeout(std::time::Duration::from_secs(timeout_secs))
@@ -69,7 +69,9 @@ impl Client {
     }
 
     fn url(&self, path: &str) -> AppResult<Url> {
-        self.base_url.join(path).map_err(Into::into)
+        self.base_url
+            .join(path.trim_start_matches('/'))
+            .map_err(Into::into)
     }
 
     async fn handle(&self, resp: reqwest::Response) -> AppResult<reqwest::Response> {

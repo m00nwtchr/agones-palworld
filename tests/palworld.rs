@@ -13,7 +13,7 @@ async fn info_returns_server_info() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/info"))
-        .and(header("authorization", "Basic Omh1bnRlcjI="))
+        .and(header("authorization", "Basic YWRtaW46aHVudGVyMg=="))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "version": "v1.0.0", "servername": "Test", "description": "x",
             "worldguid": "GUID",
@@ -69,7 +69,7 @@ async fn save_posts_to_endpoint() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/save"))
-        .and(header("authorization", "Basic Omh1bnRlcjI="))
+        .and(header("authorization", "Basic YWRtaW46aHVudGVyMg=="))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&server)
@@ -82,7 +82,7 @@ async fn announce_posts_message_body() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/announce"))
-        .and(header("authorization", "Basic Omh1bnRlcjI="))
+        .and(header("authorization", "Basic YWRtaW46aHVudGVyMg=="))
         .and(header("content-type", "application/json"))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)

@@ -39,7 +39,7 @@ fleet:
                 - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
               ports:
                 - { name: game, containerPort: 8211, protocol: UDP }
-                - { name: rest, containerPort: 8211, protocol: TCP }
+                - { name: rest, containerPort: 8212, protocol: TCP }
               volumeMounts:
                 - { name: scripts, mountPath: /scripts }
                 - { name: savegames, mountPath: /pal/Package/Pal/Saved }
@@ -50,7 +50,7 @@ fleet:
                 - name: PALWORLD_ADMIN_PASSWORD
                   valueFrom: { secretKeyRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE, key: palworld_admin_password } }
                 - name: PALWORLD_API_URL
-                  value: "http://127.0.0.1:8211"
+                  value: "http://127.0.0.1:8212/v1/api/"
                 - name: POD_NAME
                   valueFrom: { fieldRef: { fieldPath: metadata.name } }
                 - name: POD_NAMESPACE
@@ -69,7 +69,7 @@ palworld:
     # tag format: "vX.Y.Z" (or "vX.Y.Z@sha256:<digest>" to pin).
     tag: ""
     pullPolicy: IfNotPresent
-  restPort: 8211
+  restPort: 8212
   gamePort: 8211
   env: { }
   envFrom: [ ]
@@ -133,7 +133,11 @@ pod:
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
+  # readOnlyRootFilesystem is OFF by default: the Palworld game server
+  # expects a writable root (config / cache writes outside mounted volumes).
+  # Operators who want it back on the sidecar container (or all containers)
+  # can override this block in their values.
+  readOnlyRootFilesystem: false
   capabilities: { drop: ["ALL"] }
 
 service:

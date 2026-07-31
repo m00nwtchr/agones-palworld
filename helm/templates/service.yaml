@@ -11,17 +11,15 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
-  {{- if eq .Values.service.clusterIP "None" }}
-  clusterIP: None
-  {{- end }}
   ipFamilyPolicy: {{ .Values.service.ipFamilyPolicy }}
   ipFamilies:
   {{- toYaml .Values.service.ipFamilies | nindent 4 }}
   ports:
     - name: {{ .Values.service.protocol | lower }}
       port: {{ .Values.service.port }}
-      targetPort: game
       protocol: {{ .Values.service.protocol }}
   selector:
     {{- include "agones-palworld.selectorLabels" . | nindent 4 }}
-    agones.dev/fleet: {{ include "agones-palworld.fullname" . | quote }}
+    app.kubernetes.io/controller: palworld
+    app.kubernetes.io/instance: {{ include "agones-palworld.fullname" . | quote }}
+    app.kubernetes.io/name: palworld

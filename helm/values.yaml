@@ -18,7 +18,13 @@ fleet:
       container: palworld
       ports:
         - { name: game, portPolicy: None, containerPort: 8211, protocol: UDP }
-      health: { periodSeconds: 2, failureThreshold: 3 }
+      counters:
+        players:
+          count: 0
+      lists:
+        players: # players list
+          values: []
+      health: { periodSeconds: 5, failureThreshold: 5 }
       sdkServer: { grpcPort: 9358, httpPort: 9359 }
       # PodTemplateSpec wraps the standard K8s pod spec (containers, volumes, etc.)
       template:
@@ -38,8 +44,7 @@ fleet:
               envFrom:
                 - secretRef: { name: PLACEHOLDER_REPLACED_BY_TEMPLATE }
               ports:
-                - { name: game, containerPort: 8211, protocol: UDP }
-                - { name: rest, containerPort: 8212, protocol: TCP }
+                - { name: api, containerPort: 8212, protocol: TCP }
               volumeMounts:
                 - { name: scripts, mountPath: /scripts }
                 - { name: savegames, mountPath: /pal/Package/Pal/Saved }
@@ -141,10 +146,7 @@ containerSecurityContext:
   capabilities: { drop: ["ALL"] }
 
 service:
-  # Headless behavior is achieved via clusterIP: None (the modern k8s way).
-  # type=Headless was deprecated and removed in k8s >=1.26.
   type: ClusterIP
-  clusterIP: None
   port: 8211
   protocol: UDP
   ipFamilyPolicy: SingleStack
@@ -155,6 +157,6 @@ service:
 secret:
   enabled: true
   existingSecret: ""
-  passwordKey: "palworld_admin_password"
+  passwordKey: "PALWORLD_ADMIN_PASSWORD"
   autoGenerate: true
   length: 32

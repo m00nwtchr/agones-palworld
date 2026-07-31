@@ -55,7 +55,7 @@
     {{- $newEnv := list }}
     {{- range $c.env }}
       {{- if eq .name "PALWORLD_API_URL" }}
-        {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://127.0.0.1:%d" (int $.Values.palworld.restPort))) }}
+        {{- $newEnv = append $newEnv (dict "name" "PALWORLD_API_URL" "value" (printf "http://127.0.0.1:%d/v1/api/" (int $.Values.palworld.restPort))) }}
       {{- else if eq .name "PALWORLD_ADMIN_PASSWORD" }}
         {{- $newEnv = append $newEnv (dict "name" "PALWORLD_ADMIN_PASSWORD" "valueFrom" (dict "secretKeyRef" (dict "name" $secretName "key" $.Values.secret.passwordKey))) }}
       {{- else }}
@@ -126,9 +126,18 @@ spec:
       {{- toYaml .Values.fleet.template.metadata | nindent 6 }}
     spec:
       {{- toYaml $gsFields | nindent 6 }}
+      counters:
+        players:
+          count: 0
+      lists:
+        players:
+          values: []
       template:
         metadata:
           labels:
             agones.dev/sdk-server: agones-sidecar
+            app.kubernetes.io/controller: palworld
+            app.kubernetes.io/instance: {{ include "agones-palworld.fullname" . | quote }}
+            app.kubernetes.io/name: palworld
         spec:
           {{- toYaml $podSpec | nindent 10 }}

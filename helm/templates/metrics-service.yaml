@@ -24,6 +24,4 @@ spec:
   selector:
     {{- include "agones-palworld.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/controller: palworld
-    app.kubernetes.io/instance: {{ include "agones-palworld.fullname" . | quote }}
-    app.kubernetes.io/name: palworld
 {{- end }}

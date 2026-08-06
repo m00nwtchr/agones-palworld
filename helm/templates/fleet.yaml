@@ -136,8 +136,7 @@ spec:
         metadata:
           labels:
             agones.dev/sdk-server: agones-sidecar
+            {{- include "agones-palworld.selectorLabels" . | nindent 12 }}
             app.kubernetes.io/controller: palworld
-            app.kubernetes.io/instance: {{ include "agones-palworld.fullname" . | quote }}
-            app.kubernetes.io/name: palworld
         spec:
           {{- toYaml $podSpec | nindent 10 }}
